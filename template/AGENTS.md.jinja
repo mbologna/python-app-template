@@ -4,11 +4,11 @@
 
 ## Layout
 
-```
-src/{{ package_name }}/   # the package; main() is the console script `{{ project_name }}`
-tests/                    # pytest; keep I/O out of the logic so it tests without mocks
-Dockerfile                # two stages: uv sync --locked into /opt/venv, then a pip-less runtime
-```
+- `src/{{ package_name }}/`: the package; its `main()` is the console script
+  `{{ project_name }}`, the image's entry point.
+- `tests/`: pytest. Keep I/O out of the logic so it tests without mocks.
+- `Dockerfile`: two stages, `uv sync --locked` into `/opt/venv`, then a
+  runtime without pip.
 
 ## Conventions
 
