@@ -35,7 +35,8 @@ template run `uv lock` after rendering; without it, run `uv lock` yourself.
 
 ```sh
 cd existing-app
-uvx copier copy --trust --overwrite -d sample_code=false \
+uvx copier copy --trust --overwrite --defaults -d sample_code=false \
+  -d project_name=existing-app -d 'description=What it does' -d forge=gitlab \
   https://github.com/mbologna/python-app-template.git .
 git diff
 ```
@@ -43,8 +44,16 @@ git diff
 Then put the repository's own parts back where the template overwrote
 them: its dependencies and console scripts in `pyproject.toml`, anything
 extra its Dockerfile needs (system packages, a second binary), and its
-CI inputs. `README.md`, `AGENTS.md` and `LICENSE` are never overwritten
-when they exist. Move the code to `src/<package>/` if it isn't there yet,
+CI inputs. The `uv lock` the template ran saw its own dependency list,
+not the repository's, so restore the lock file and lock again, which
+keeps every existing pin:
+
+```sh
+git checkout HEAD -- uv.lock && uv lock
+```
+
+`README.md`, `AGENTS.md` and `LICENSE` are never overwritten when they
+exist. Move the code to `src/<package>/` if it isn't there yet,
 and keep `.copier-answers.yml`: it is what updates read.
 
 ## Updates
