@@ -1,0 +1,97 @@
+# Copier template for a small Python application shipped as a container
+# image: src/ layout, uv, ruff, pytest with a coverage gate, a hardened
+# two-stage Dockerfile, and CI on GitHub or GitLab. See README.md.
+
+_min_copier_version: "9.4.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+project_name:
+  type: str
+  help: Distribution, console script and image name (lowercase, hyphens)
+  validator: >-
+    {% if not (project_name | regex_search('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')) %}
+    Use lowercase letters, digits and single hyphens, starting with a letter.
+    {% endif %}
+
+package_name:
+  type: str
+  help: Import name of the package under src/
+  default: "{{ project_name | replace('-', '_') }}"
+  validator: >-
+    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Use a valid lowercase Python identifier.
+    {% endif %}
+
+description:
+  type: str
+  help: One-line description (pyproject, README, image label)
+
+author:
+  type: str
+  help: Author and copyright holder
+  default: Michele Bologna
+
+forge:
+  type: str
+  help: Where the repository lives, which picks the CI
+  choices:
+    GitHub (mbologna/.github reusable workflows, images on GHCR): github
+    GitLab (mbologna/ci-templates components, images on the project registry): gitlab
+  default: github
+
+base_variant:
+  type: str
+  help: Runtime base image (slim is glibc and takes every wheel; alpine is smaller)
+  choices:
+    python:<version>-slim (Debian): slim
+    python:<version>-alpine (musl): alpine
+  default: slim
+
+notifications:
+  type: bool
+  help: Send notifications through an Apprise API server (apprise-notify-py, APPRISE_URL)
+  default: true
+
+sample_code:
+  type: bool
+  help: >-
+    Generate the example package and its tests (answer no when adopting the
+    template in a repository that already has its code)
+  default: true
+
+smoke_cmd:
+  type: str
+  help: >-
+    GitHub only: the docker-ci smoke test, a shell command that exits 0 in
+    the built image without network or configuration
+  default: "{{ project_name }} --help"
+  when: "{{ forge == 'github' }}"
+
+coverage_fail_under:
+  type: int
+  help: Minimum total test coverage, in percent ([tool.coverage.report] fail_under)
+  default: 80
+
+# Files the project owns after the first copy: an update never rewrites them.
+_skip_if_exists:
+  - README.md
+  - AGENTS.md
+  - LICENSE
+
+# uv.lock depends on the project's own dependencies, so it is generated
+# rather than templated. Needs `copier copy --trust` (or `--trust` on update).
+_tasks:
+  - command: uv lock
+    when: "{{ _copier_conf.os != 'windows' }}"
+
+_message_after_copy: |
+  {{ project_name }} is ready. Next:
+    cd {{ _copier_conf.dst_path }}
+    uv lock   # if copier ran without --trust, which skips the task that does it
+    uv run pytest && uv run ruff check . && uv run ruff format --check .
+    pre-commit install
+  Release by merging Conventional Commits: the weekly auto-release run tags
+  vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
+  placeholder (README.md, "Versions").

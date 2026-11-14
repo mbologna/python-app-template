@@ -1,0 +1,49 @@
+"""{{ description }}
+
+An example to replace: one run builds a report{% if notifications %} and, unless --dry-run is
+given, sends it through Apprise{% endif %}, then exits non-zero when something
+needs attention, so a failed Job shows up in the cluster too.
+"""
+
+import argparse
+{%- if notifications %}
+import os
+
+from apprise_notify import notify
+{%- endif %}
+
+__all__ = ["build_report", "main"]
+
+
+def build_report(items: list[str]) -> tuple[str, str, bool]:
+    """Return the notification title and body, and whether it is a problem.
+
+    Pure logic, no I/O: the part of an application worth most of its tests.
+    """
+    problems = sorted({item.strip() for item in items if item.strip()})
+    if not problems:
+        return "{{ project_name }}: all good", "Nothing to report.", False
+    body = "\n".join(f"- {item}" for item in problems)
+    return f"{{ project_name }}: {len(problems)} to look at", body, True
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="{{ project_name }}", description=__doc__.splitlines()[0])
+    parser.add_argument("items", nargs="*", help="items to report (example input)")
+{%- if notifications %}
+    parser.add_argument("--dry-run", action="store_true", help="print the report instead of sending it")
+{%- endif %}
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    title, body, problem = build_report(args.items)
+    print(f"{title}\n{body}")
+{%- if notifications %}
+    if problem and not args.dry_run:
+        # APPRISE_URL holds one Apprise API notify URL, or several separated by
+        # spaces, tried in order until one delivers. Empty sends nothing.
+        notify(os.environ.get("APPRISE_URL", ""), title, body, type_="warning")
+{%- endif %}
+    return 1 if problem else 0

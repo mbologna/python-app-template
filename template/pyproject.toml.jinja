@@ -1,0 +1,83 @@
+[project]
+name = "{{ project_name }}"
+# A placeholder, never bumped: a release is the git tag vX.Y.Z that
+# auto-release creates, and the image built from that tag carries the
+# version in its org.opencontainers.image.version label. Nothing reads this
+# field at run time.
+version = "0.0.0"
+description = "{{ description }}"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "{{ author }}" }]
+# The Python the Dockerfile's base image ships; Renovate moves the image,
+# a person moves this floor with the next minor.
+requires-python = ">=3.15"
+dependencies = [
+{%- if notifications %}
+    "apprise-notify @ git+https://github.com/mbologna/apprise-notify-py@v1.2.0",
+{%- endif %}
+]
+
+[project.scripts]
+{{ project_name }} = "{{ package_name }}:main"
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.0",
+]
+
+[tool.uv]
+required-version = ">=0.12.12"
+# Resolve only releases at least 7 days old, so a compromised release has
+# time to be caught and yanked before it lands in uv.lock. For an urgent
+# fix, add `<name> = false` to exclude-newer-package and run `uv lock`.
+exclude-newer = "7 days"
+{%- if notifications %}
+# apprise-notify is a git dependency pinned by tag, which the cutoff does not
+# cover anyway; the entry keeps it exempt if it moves to a registry.
+exclude-newer-package = { apprise-notify = false }
+{%- endif %}
+
+[tool.ruff]
+line-length = 120
+target-version = "py315"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (the formatter handles it)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --strict-markers"
+
+[tool.coverage.run]
+source = ["{{ package_name }}"]
+# `python -m {{ package_name }}` only calls main().
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+# CI fails below this total (python-ci and ci-templates' python-test read
+# it). Raise it with the tests; don't lower it to merge.
+fail_under = {{ coverage_fail_under }}
+show_missing = true

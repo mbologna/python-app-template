@@ -1,0 +1,56 @@
+import pytest
+
+{% if notifications -%}
+import {{ package_name }}
+{% endif -%}
+from {{ package_name }} import build_report, main
+
+
+def test_report_without_items_is_not_a_problem():
+    title, body, problem = build_report([])
+    assert not problem
+    assert title.endswith("all good")
+    assert body == "Nothing to report."
+
+
+def test_report_lists_items_once_sorted():
+    title, body, problem = build_report(["b", " a ", "b", ""])
+    assert problem
+    assert "2 to look at" in title
+    assert body == "- a\n- b"
+
+
+def test_help_exits_zero(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--help"])
+    assert exc.value.code == 0
+    assert "{{ project_name }}" in capsys.readouterr().out
+
+
+def test_clean_run_exits_zero():
+    assert main([]) == 0
+{%- if notifications %}
+
+
+@pytest.fixture
+def sent(monkeypatch):
+    calls = []
+    monkeypatch.setenv("APPRISE_URL", "http://a/notify/k http://b/notify/k")
+    monkeypatch.setattr({{ package_name }}, "notify", lambda url, title, body, **kw: calls.append((url, title, kw)))
+    return calls
+
+
+def test_problem_is_sent_to_apprise(sent):
+    assert main(["disk full"]) == 1
+    assert sent == [("http://a/notify/k http://b/notify/k", "{{ project_name }}: 1 to look at", {"type_": "warning"})]
+
+
+def test_dry_run_sends_nothing(sent):
+    assert main(["--dry-run", "disk full"]) == 1
+    assert sent == []
+{%- else %}
+
+
+def test_problem_exits_non_zero():
+    assert main(["disk full"]) == 1
+{%- endif %}

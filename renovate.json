@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>mbologna/.github//renovate-config.json"],
+  "description": "The template's files under template/ are Jinja, which most managers don't look at or can't parse. The Dockerfile and workflow managers read them line by line, so they only need the file names; the GitLab CI file and pyproject.toml get regex managers. Files without the .jinja suffix (requirements-uv.txt, .pre-commit-config.yaml, renovate.json) are found by the default managers.",
+  "dockerfile": {
+    "managerFilePatterns": ["/(^|/)Dockerfile$/", "/^template/Dockerfile\\.jinja$/"]
+  },
+  "github-actions": {
+    "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/", "/^template/.+/workflows/[^/]+\\.ya?ml(\\.jinja)?$/"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The rendered .gitlab-ci.yml's test image, the Python the Dockerfile ships: Jinja the gitlabci manager can't parse.",
+      "managerFilePatterns": ["/^template/.*gitlab-ci\\.yml.*\\.jinja$/"],
+      "matchStrings": ["image: (?<depName>python):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "The rendered .gitlab-ci.yml's ci-templates components, all at one version.",
+      "managerFilePatterns": ["/^template/.*gitlab-ci\\.yml.*\\.jinja$/"],
+      "matchStrings": ["component: gitlab\\.com/(?<depName>mbologna/ci-templates)/[a-z-]+@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "gitlab-tags",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "apprise-notify-py, a git dependency pinned by tag in the rendered pyproject.toml.",
+      "managerFilePatterns": ["/^template/pyproject\\.toml\\.jinja$/"],
+      "matchStrings": ["apprise-notify @ git\\+https://github\\.com/(?<depName>mbologna/apprise-notify-py)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "github-tags"
+    }
+  ]
+}

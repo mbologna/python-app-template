@@ -1,0 +1,90 @@
+name: CI
+
+# Renders the template in each supported combination and checks that the
+# result passes its own checks: ruff, the tests with the coverage gate,
+# hadolint, the image build and its smoke test. Monday's schedule releases
+# the template (auto-release, conventional), and each vX.Y.Z tag is what
+# Renovate's copier manager offers the generated repositories.
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Render (${{ matrix.forge }}, ${{ matrix.base }}, notifications ${{ matrix.notifications }})
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { forge: github, base: slim, notifications: true }
+          - { forge: gitlab, base: alpine, notifications: true }
+          - { forge: github, base: alpine, notifications: false }
+    env:
+      # Inside the workspace, so the hadolint action's container sees it;
+      # copier reads the template from git HEAD, not the working tree.
+      OUT: ${{ github.workspace }}/rendered
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          python-version: "3.15"
+
+      - name: Render
+        env:
+          FORGE: ${{ matrix.forge }}
+          BASE: ${{ matrix.base }}
+          NOTIFICATIONS: ${{ matrix.notifications }}
+        run: |
+          uvx --from 'copier==9.19.1' copier copy --trust --defaults --vcs-ref HEAD \
+            -d project_name=demo-app -d 'description=A rendered example' \
+            -d "forge=${FORGE}" -d "base_variant=${BASE}" -d "notifications=${NOTIFICATIONS}" \
+            . "$OUT"
+          find "$OUT" -type f -not -path '*/.venv/*' | sort
+
+      - name: Lint and test
+        working-directory: ${{ env.OUT }}
+        run: |
+          uv sync --locked
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest --cov
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: rendered/Dockerfile
+
+      - name: Build and smoke-test the image
+        working-directory: ${{ env.OUT }}
+        run: |
+          docker build -t demo-app:ci .
+          docker run --rm --network none demo-app:ci --help
+          test "$(docker inspect demo-app:ci --format '{{.Config.User}}')" = 1000:1000
+          ! docker run --rm --entrypoint sh demo-app:ci -c 'command -v pip || command -v uv || command -v git'
+
+  auto-release:
+    needs: render
+    permissions:
+      contents: write
+    uses: mbologna/.github/.github/workflows/auto-release.yml@0526d7e5eb36426d31732e97b20e6e275c1ad4f3 # main
+    with:
+      strategy: conventional
+      # Nothing builds on a tag: the tag itself is the release.
+      dispatch_tag_build: false
+    secrets: inherit

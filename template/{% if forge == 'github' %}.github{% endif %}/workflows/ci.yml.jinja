@@ -1,0 +1,58 @@
+name: CI
+
+"on":
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+  # Never cancel a run on the default branch: it may be releasing, and a cut
+  # release leaves a tag without its Release.
+  cancel-in-progress: {% raw %}${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}{% endraw %}
+
+permissions:
+  contents: read
+
+jobs:
+  # ruff, the tests with the coverage gate (fail_under in pyproject.toml)
+  # and pip-audit on the locked runtime dependencies.
+  python:
+    uses: mbologna/.github/.github/workflows/python-ci.yml@0526d7e5eb36426d31732e97b20e6e275c1ad4f3 # main
+    with:
+      python_version: "3.15"
+      enable_codecov: false
+    secrets: inherit
+
+  docker:
+    needs: python
+    # contents: the release tag and its Release; actions: dispatch the tag
+    # build (a tag pushed with GITHUB_TOKEN triggers no run); the rest:
+    # push, sign and scan the image.
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+      actions: write
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@0526d7e5eb36426d31732e97b20e6e275c1ad4f3 # main
+    with:
+      image_name: {{ project_name }}
+      # Only release tags publish the image (auto-release dispatches
+      # their build); pull requests build it without pushing.
+      publish: release
+      push_to_dockerhub: false
+      # The image must start before anything is tagged: run without network
+      # or configuration, this exits 0 only when the code and its
+      # dependencies import.
+      smoke_cmd: {{ smoke_cmd | tojson }}
+      # auto-release runs inside docker-ci: Monday's schedule releases with
+      # this strategy (and a maintenance release for dependency updates), a
+      # push to main only a CVE fix.
+      release_strategy: conventional
+    secrets: inherit
