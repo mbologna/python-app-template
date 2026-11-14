@@ -71,6 +71,9 @@ indent-style = "space"
 testpaths = ["tests"]
 addopts = "-v --strict-markers"
 
+[tool.bandit]
+exclude_dirs = ["tests"]
+
 [tool.coverage.run]
 source = ["{{ package_name }}"]
 # `python -m {{ package_name }}` only calls main().
