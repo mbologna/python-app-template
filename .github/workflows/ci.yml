@@ -51,7 +51,7 @@ jobs:
           BASE: ${{ matrix.base }}
           NOTIFICATIONS: ${{ matrix.notifications }}
         run: |
-          uvx --from 'copier==9.19.1' copier copy --trust --defaults --vcs-ref HEAD \
+          uvx --from 'copier==9.19.1' copier copy --defaults --vcs-ref HEAD \
             -d project_name=demo-app -d 'description=A rendered example' \
             -d "forge=${FORGE}" -d "base_variant=${BASE}" -d "notifications=${NOTIFICATIONS}" \
             . "$OUT"
@@ -60,6 +60,7 @@ jobs:
       - name: Lint and test
         working-directory: ${{ env.OUT }}
         run: |
+          uv lock
           uv sync --locked
           uv run ruff check .
           uv run ruff format --check .

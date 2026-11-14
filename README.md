@@ -22,20 +22,21 @@ skeleton reaches all of them as an ordinary pull request.
 ## New project
 
 ```sh
-uvx copier copy --trust https://github.com/mbologna/python-app-template.git my-app
+uvx copier copy https://github.com/mbologna/python-app-template.git my-app
+cd my-app && uv lock
 ```
 
 The questions: the project and package names, a description, the forge
 (GitHub or GitLab), the base image variant, whether the app sends
 notifications, whether to generate the example package and tests, the
-GitHub smoke test command, and the coverage threshold. `--trust` lets the
-template run `uv lock` after rendering; without it, run `uv lock` yourself.
+GitHub smoke test command, and the coverage threshold. The template runs
+no tasks, so it needs no `--trust`; `uv lock` creates the lock file.
 
 ## Adopting it in an existing repository
 
 ```sh
 cd existing-app
-uvx copier copy --trust --overwrite --defaults -d sample_code=false \
+uvx copier copy --overwrite --defaults -d sample_code=false \
   -d project_name=existing-app -d 'description=What it does' -d forge=gitlab \
   https://github.com/mbologna/python-app-template.git .
 git diff
@@ -44,9 +45,8 @@ git diff
 Then put the repository's own parts back where the template overwrote
 them: its dependencies and console scripts in `pyproject.toml`, anything
 extra its Dockerfile needs (system packages, a second binary), and its
-CI inputs. The `uv lock` the template ran saw its own dependency list,
-not the repository's, so restore the lock file and lock again, which
-keeps every existing pin:
+CI inputs. Keep the repository's lock file and lock again, which keeps
+every existing pin:
 
 ```sh
 git checkout HEAD -- uv.lock && uv lock
@@ -62,7 +62,7 @@ Renovate's `copier` manager reads `.copier-answers.yml` and opens a pull
 request when this template tags a new version. By hand:
 
 ```sh
-uvx copier update --trust
+uvx copier update && uv lock
 ```
 
 Conflicts are left inline; resolve them in favour of the project's own
@@ -86,8 +86,8 @@ alpine, GitHub without notifications) and runs each result's ruff, tests,
 hadolint, image build and smoke test. Locally:
 
 ```sh
-uvx copier copy --trust --defaults -d project_name=demo-app -d description=Demo . /tmp/demo-app
-cd /tmp/demo-app && uv run pytest --cov && docker build -t demo-app . && docker run --rm demo-app --help
+uvx copier copy --defaults --vcs-ref HEAD -d project_name=demo-app -d description=Demo . /tmp/demo-app
+cd /tmp/demo-app && uv lock && uv run pytest --cov && docker build -t demo-app . && docker run --rm demo-app --help
 ```
 
 Renovate keeps the pins under `template/` current: `renovate.json` points
