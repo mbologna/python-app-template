@@ -1,26 +1,46 @@
+{%- set ships_releases = forge == 'gitlab' or releases -%}
+{%- set registry = 'ghcr.io/mbologna' if forge == 'github' else 'registry.gitlab.com/mbologna' -%}
+{%- set image = registry ~ '/' ~ project_name ~ ':' ~ ('latest' if ships_releases else 'sha-<commit>') -%}
 # {{ project_name }}
 
 {{ description }}
 
-{% if notifications -%}
+{% if notifications or port -%}
 ## Configuration
 
 | Variable | Required | Default | |
 |---|---|---|---|
+{%- if port %}
+| `PORT` | no | `{{ port }}` | Port the server listens on |
+{%- endif %}
+{%- if notifications %}
 | `APPRISE_URL` | no | | Apprise API notify URL. Several space-separated URLs are tried in order until one delivers; empty sends nothing |
+{%- endif %}
 
 {% endif -%}
 ## Running
 
 ```sh
-docker run --rm {% if forge == 'github' %}ghcr.io/mbologna{% else %}registry.gitlab.com/mbologna{% endif %}/{{ project_name }}:latest --help
+{% if port and entrypoint != 'none' -%}
+docker run --rm -p {{ port }}:{{ port }} {{ image }}
+{%- elif entrypoint == 'entrypoint' -%}
+docker run --rm {{ image }} --help
+{%- elif entrypoint == 'cmd' -%}
+docker run --rm {{ image }} {{ project_name }} --help
+{%- else -%}
+docker run --rm {{ image }} <script> --help
+{%- endif %}
 ```
 
-The image runs as uid 1000 and works with a read-only root filesystem;
-mount a writable `/tmp`.
+{% if entrypoint == 'none' -%}
+The image has no entry point: name one of the console scripts in
+`pyproject.toml`'s `[project.scripts]`. {% endif -%}
+The image runs as uid {{ image_uid }} and works with a read-only root filesystem;
+mount a writable `/tmp`{% if writable_dirs.split() %} and {% for d in writable_dirs.split() %}`{{ d }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}.
 
 ## Versions
 
+{% if ships_releases -%}
 Releases are the git tags `vX.Y.Z`. A weekly CI run (Monday 06:00 UTC)
 tags the next version when a `feat`, `fix`, `perf`, `revert` or breaking
 commit landed, or a maintenance patch when dependency updates are waiting;
@@ -28,6 +48,11 @@ a CVE fix releases on the push that brings it. Only a tag builds and pushes
 the image, as `X.Y.Z`, `X.Y` and `latest`, with the version in its
 `org.opencontainers.image.version` label. `version` in `pyproject.toml` is a
 placeholder and stays `0.0.0`.
+{%- else -%}
+There are no releases. Every push to main that changes the image publishes
+it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
+`version` in `pyproject.toml` is a placeholder and stays `0.0.0`.
+{%- endif %}
 
 ## Development
 
@@ -47,3 +72,9 @@ entry once the release is a week old.
 The skeleton (Dockerfile, CI, lint and test configuration) comes from
 [python-app-template](https://github.com/mbologna/python-app-template);
 Renovate proposes its updates as pull requests.
+{%- if license != 'none' %}
+
+## Licence
+
+{{ license_expression if license == 'other' else license }}{% if license != 'other' %}: see [LICENSE](LICENSE){% else %}: see [LICENSE](LICENSE) and `LICENSES/`{% endif %}.
+{%- endif %}
