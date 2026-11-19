@@ -62,6 +62,14 @@ jobs:
             run: --help
             user: "1000:1000"
             port: "8080"
+          - name: GitHub, changelog releases, Cloud Run job
+            answers: |
+              releases: false
+              changelog_releases: true
+              cloud_run: job
+            run: --help
+            user: "1000:1000"
+            port: ""
           - name: GitHub, alpine, CMD, build and run-time packages, Apache
             answers: |
               base_variant: alpine
