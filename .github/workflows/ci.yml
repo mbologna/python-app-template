@@ -1,10 +1,12 @@
 name: CI
 
-# Renders the template in each supported combination and checks that the
+# Renders the template in several answer combinations and checks that each
 # result passes its own checks: ruff, the tests with the coverage gate,
-# hadolint, the image build and its smoke test. Monday's schedule releases
-# the template (auto-release, conventional), and each vX.Y.Z tag is what
-# Renovate's copier manager offers the generated repositories.
+# pre-commit, hadolint, the image build and a smoke test of the image. A
+# second job updates a project rendered from the latest release to this
+# commit and checks that the update equals a fresh copy. Monday's schedule
+# releases the template (auto-release, conventional), and each vX.Y.Z tag
+# is what Renovate's copier manager offers the generated repositories.
 
 "on":
   push:
@@ -21,20 +23,74 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  COPIER: copier==9.19.1
+
 jobs:
   render:
-    name: Render (${{ matrix.forge }}, ${{ matrix.base }}, notifications ${{ matrix.notifications }})
+    name: Render (${{ matrix.name }})
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { forge: github, base: slim, notifications: true }
-          - { forge: gitlab, base: alpine, notifications: true }
-          - { forge: github, base: alpine, notifications: false }
+          - name: GitHub, defaults
+            answers: "{}"
+            run: --help
+            user: "1000:1000"
+            port: ""
+          - name: GitLab, alpine, several programs, extra image, no licence
+            answers: |
+              forge: gitlab
+              base_variant: alpine
+              entrypoint: none
+              runtime_packages: tzdata
+              extra_images: worker
+              license: none
+            run: demo-app --help
+            user: "1000:1000"
+            port: ""
+          - name: GitHub, web service on Cloud Run, named user, GPL
+            answers: |
+              releases: false
+              cloud_run: service
+              port: 8080
+              image_user: appuser
+              writable_dirs: /data /output
+              license: GPL-3.0-only
+              notifications: false
+            run: --help
+            user: "1000:1000"
+            port: "8080"
+          - name: GitHub, alpine, CMD, build and run-time packages, Apache
+            answers: |
+              base_variant: alpine
+              entrypoint: cmd
+              notifications: false
+              build_packages: gcc musl-dev
+              runtime_packages: tzdata
+              image_uid: 65532
+              runtime_env: STATE_DIR=/state TZ=UTC
+              license: Apache-2.0
+              codecov: true
+              main_module: false
+            run: demo-app --help
+            user: "65532:65532"
+            port: ""
+          - name: GitLab, slim, custom smoke test, SPDX expression
+            answers: |
+              forge: gitlab
+              smoke_cmd: --help
+              license: other
+              license_expression: MIT AND GPL-3.0-only
+              build_packages: gcc libc6-dev
+              runtime_packages: ca-certificates tzdata
+              runtime_env: QT_QPA_PLATFORM=offscreen
+            run: --help
+            user: "1000:1000"
+            port: ""
     env:
-      # Inside the workspace, so the hadolint action's container sees it;
-      # copier reads the template from git HEAD, not the working tree.
+      # Inside the workspace, so the hadolint action's container sees it.
       OUT: ${{ github.workspace }}/rendered
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -47,14 +103,17 @@ jobs:
 
       - name: Render
         env:
-          FORGE: ${{ matrix.forge }}
-          BASE: ${{ matrix.base }}
-          NOTIFICATIONS: ${{ matrix.notifications }}
+          ANSWERS: ${{ matrix.answers }}
         run: |
-          uvx --from 'copier==9.19.1' copier copy --defaults --vcs-ref HEAD \
+          printf '%s\n' "$ANSWERS" > "$RUNNER_TEMP/answers.yml"
+          uvx --from "$COPIER" copier copy --defaults --vcs-ref HEAD \
             -d project_name=demo-app -d 'description=A rendered example' \
-            -d "forge=${FORGE}" -d "base_variant=${BASE}" -d "notifications=${NOTIFICATIONS}" \
-            . "$OUT"
+            --data-file "$RUNNER_TEMP/answers.yml" . "$OUT"
+          # license: other leaves LICENSE and LICENSES/ to the project.
+          if grep -q '^license: other$' "$OUT/.copier-answers.yml"; then
+            printf 'MIT License\n' > "$OUT/LICENSE"
+            mkdir -p "$OUT/LICENSES" && printf 'GPL-3.0-only\n' > "$OUT/LICENSES/GPL-3.0-only.txt"
+          fi
           find "$OUT" -type f -not -path '*/.venv/*' | sort
 
       - name: Lint and test
@@ -66,6 +125,15 @@ jobs:
           uv run ruff format --check .
           uv run pytest --cov
 
+      - name: pre-commit
+        working-directory: ${{ env.OUT }}
+        env:
+          # hadolint is a system hook (a binary on PATH); the next step runs it.
+          SKIP: hadolint
+        run: |
+          git init -q && git add -A
+          uv run pre-commit run --all-files --show-diff-on-failure
+
       - name: hadolint
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
@@ -73,14 +141,62 @@ jobs:
 
       - name: Build and smoke-test the image
         working-directory: ${{ env.OUT }}
+        env:
+          RUN_ARGS: ${{ matrix.run }}
+          WANT_USER: ${{ matrix.user }}
+          WANT_PORT: ${{ matrix.port }}
         run: |
           docker build -t demo-app:ci .
-          docker run --rm --network none demo-app:ci --help
-          test "$(docker inspect demo-app:ci --format '{{.Config.User}}')" = 1000:1000
+          # shellcheck disable=SC2086 # RUN_ARGS is a word list
+          docker run --rm --network none --read-only --tmpfs /tmp demo-app:ci $RUN_ARGS
+          test "$(docker inspect demo-app:ci --format '{{.Config.User}}')" = "$WANT_USER"
+          ports=$(docker inspect demo-app:ci --format '{{range $p, $_ := .Config.ExposedPorts}}{{$p}}{{end}}')
+          test "$ports" = "${WANT_PORT:+$WANT_PORT/tcp}"
           ! docker run --rm --entrypoint sh demo-app:ci -c 'command -v pip || command -v uv || command -v git'
 
+  update:
+    name: Update from the latest release (${{ matrix.forge }})
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        forge: [github, gitlab]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+
+      # A project that changed nothing must come out of `copier update` the
+      # same as a fresh copy: no conflict, no leftover, and no --trust.
+      - name: Update and compare with a fresh copy
+        env:
+          FORGE: ${{ matrix.forge }}
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name CI
+          latest=$(git describe --tags --abbrev=0 --match 'v*.*.*' HEAD)
+          echo "Latest release: $latest"
+          answers=(-d project_name=demo-app -d 'description=A rendered example' -d "forge=$FORGE")
+          uvx --from "$COPIER" copier copy --quiet --defaults --vcs-ref "$latest" "${answers[@]}" "$PWD" "$RUNNER_TEMP/old"
+          (cd "$RUNNER_TEMP/old" && git init -q && git add -A && git commit -qm "copy $latest")
+          uvx --from "$COPIER" copier update --quiet --defaults --vcs-ref HEAD "$RUNNER_TEMP/old"
+          uvx --from "$COPIER" copier copy --quiet --defaults --vcs-ref HEAD "${answers[@]}" "$PWD" "$RUNNER_TEMP/new"
+          cd "$RUNNER_TEMP"
+          if grep -rl --exclude-dir=.git -e '^<<<<<<< ' -e '^>>>>>>> ' old || find old -name '*.rej' | grep .; then
+            echo "::error::copier update left a conflict"; exit 1
+          fi
+          # The files the project owns after the first copy (_skip_if_exists)
+          # keep their first version.
+          diff -ru --exclude=.git --exclude=README.md --exclude=AGENTS.md \
+            --exclude=CLAUDE.md --exclude=LICENSE old new
+
   auto-release:
-    needs: render
+    needs: [render, update]
     permissions:
       contents: write
     uses: mbologna/.github/.github/workflows/auto-release.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
