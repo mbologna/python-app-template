@@ -84,6 +84,7 @@ smoke_cmd:
 _skip_if_exists:
   - README.md
   - AGENTS.md
+  - CLAUDE.md
   - LICENSE
 
 # No _tasks: copier refuses a template with tasks unless --trust is given,
