@@ -35,6 +35,26 @@ author:
   help: Author and copyright holder
   default: Michele Bologna
 
+license:
+  type: str
+  help: Licence (pyproject.toml, the image label and, for the first three, the LICENSE file)
+  choices:
+    MIT: MIT
+    Apache-2.0: Apache-2.0
+    GPL-3.0-only: GPL-3.0-only
+    Another SPDX expression; the project writes LICENSE and LICENSES/: other
+    None (all rights reserved; no LICENSE, no licence metadata): none
+  default: MIT
+
+license_expression:
+  type: str
+  help: >-
+    SPDX licence expression, e.g. "MIT AND GPL-3.0-only". The project keeps
+    LICENSE and the other licence texts in LICENSES/
+  when: "{{ license == 'other' }}"
+  validator: >-
+    {% if not license_expression.strip() %}Give an SPDX expression.{% endif %}
+
 forge:
   type: str
   help: Where the repository lives, which picks the CI

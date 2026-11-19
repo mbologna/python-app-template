@@ -7,7 +7,12 @@ name = "{{ project_name }}"
 version = "0.0.0"
 description = "{{ description }}"
 readme = "README.md"
-license = "MIT"
+{%- if license == 'other' %}
+license = "{{ license_expression }}"
+license-files = ["LICENSE", "LICENSES/*"]
+{%- elif license != 'none' %}
+license = "{{ license }}"
+{%- endif %}
 authors = [{ name = "{{ author }}" }]
 # The Python the Dockerfile's base image ships; Renovate moves the image,
 # a person moves this floor with the next minor.
