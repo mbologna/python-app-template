@@ -75,6 +75,13 @@ sample_code:
     template in a repository that already has its code)
   default: true
 
+main_module:
+  type: bool
+  help: >-
+    The package has a __main__.py, so `python -m <package>` runs main()
+    (coverage leaves that file out)
+  default: true
+
 coverage_fail_under:
   type: int
   help: Minimum total test coverage, in percent ([tool.coverage.report] fail_under)

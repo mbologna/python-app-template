@@ -87,8 +87,10 @@ exclude_dirs = ["tests"]
 
 [tool.coverage.run]
 source = ["{{ package_name }}"]
+{%- if main_module %}
 # `python -m {{ package_name }}` only calls main().
 omit = ["*/__main__.py"]
+{%- endif %}
 
 [tool.coverage.report]
 # CI fails below this total (python-ci and ci-templates' python-test read
