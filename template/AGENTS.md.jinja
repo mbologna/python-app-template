@@ -1,17 +1,28 @@
-# AGENTS.md — {{ project_name }}
+{%- set ships_releases = forge == 'gitlab' or releases -%}
+# AGENTS.md: {{ project_name }}
 
 {{ description }}. User-facing docs: `README.md`.
 
 ## Layout
 
-- `src/{{ package_name }}/`: the package; its `main()` is the console script
-  `{{ project_name }}`, the image's entry point.
+{% if entrypoint == 'entrypoint' -%}
+- `src/{{ package_name }}/`: the package; `{{ script_target }}` is the console
+  script `{{ project_name }}`, the image's entry point.
+{%- elif entrypoint == 'cmd' -%}
+- `src/{{ package_name }}/`: the package; `{{ script_target }}` is the console
+  script `{{ project_name }}`, the image's default command. A deployment's
+  command picks another script from `[project.scripts]`.
+{%- else -%}
+- `src/{{ package_name }}/`: the package. The image has no entry point: each
+  deployment's command names a console script from `[project.scripts]`.
+{%- endif %}
 - `tests/`: pytest. Keep I/O out of the logic so it tests without mocks.
 - `Dockerfile`: two stages, `uv sync --locked` into `/opt/venv`, then a
   runtime without pip.
 
 ## Conventions
 
+{% if ships_releases -%}
 - Conventional Commits, header at most 72 characters. The commit subjects
   that reach main are the release notes: `feat`/`fix`/`perf` release, `refactor`,
   `test`, `docs`, `ci`, `chore` don't (a dependency update to runtime files
@@ -19,6 +30,14 @@
   [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
 - Releases are tags; `pyproject.toml`'s version stays `0.0.0`.
+{%- else -%}
+- Conventional Commits, header at most 72 characters. CI lints every commit
+  with [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
+  and rejects `fixup!` commits; pull requests merge with a merge commit.
+- No releases or version tags: every push to main that changes the image
+  publishes it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
+  `pyproject.toml`'s version stays `0.0.0`.
+{%- endif %}
 - Coverage may not drop below `fail_under` in `pyproject.toml`; raise it
   when tests are added.
 - Dependencies: `uv add <pkg>`; uv.lock is committed and the image installs
@@ -28,8 +47,12 @@
   environment variable: one URL or several space-separated ones, tried in
   order. It never raises; check its return value when sending matters.
 {%- endif %}
-- The image: non-root (uid 1000), no pip, nothing written outside `/tmp`
+- The image: non-root (uid {{ image_uid }}), no pip, nothing written outside `/tmp`{% if writable_dirs.split() %},
+  {% for d in writable_dirs.split() %}`{{ d }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
   or a mounted volume.
+- One program in the image is its `ENTRYPOINT`, and flags go in the
+  container's arguments. With several programs the image has a default
+  `CMD`, or none, and a deployment's command picks one.
 
 ## Template
 
@@ -37,3 +60,4 @@ The skeleton comes from https://github.com/mbologna/python-app-template
 (`.copier-answers.yml`). Renovate's copier manager opens a pull request
 for each template release; resolve conflicts in favour of this project's
 code. By hand: `uvx copier update`, then `uv lock` if dependencies changed.
+To change an answer: `uvx copier update -d <question>=<value>`.

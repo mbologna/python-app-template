@@ -1,11 +1,17 @@
 # Copier template for a small Python application shipped as a container
 # image: src/ layout, uv, ruff, pytest with a coverage gate, a hardened
-# two-stage Dockerfile, and CI on GitHub or GitLab. See README.md.
+# two-stage Dockerfile, and CI on GitHub or GitLab. See README.md, which
+# describes every question below.
+#
+# Every question added after v1.1.3 defaults to the output v1.1.3 gave, so a
+# `copier update` of an existing project changes nothing it didn't ask for.
 
 _min_copier_version: "9.4.0"
 _subdirectory: template
 _templates_suffix: .jinja
 _answers_file: .copier-answers.yml
+
+# --- The project ------------------------------------------------------------
 
 project_name:
   type: str
@@ -33,6 +39,26 @@ author:
   help: Author and copyright holder
   default: Michele Bologna
 
+license:
+  type: str
+  help: Licence (pyproject.toml, the image label and, for the first three, the LICENSE file)
+  choices:
+    MIT: MIT
+    Apache-2.0: Apache-2.0
+    GPL-3.0-only: GPL-3.0-only
+    Another SPDX expression; the project writes LICENSE and LICENSES/: other
+    None (all rights reserved; no LICENSE, no licence metadata): none
+  default: MIT
+
+license_expression:
+  type: str
+  help: >-
+    SPDX licence expression, e.g. "MIT AND GPL-3.0-only". The project keeps
+    LICENSE and the other licence texts in LICENSES/
+  when: "{{ license == 'other' }}"
+  validator: >-
+    {% if not license_expression.strip() %}Give an SPDX expression.{% endif %}
+
 forge:
   type: str
   help: Where the repository lives, which picks the CI
@@ -40,14 +66,6 @@ forge:
     GitHub (mbologna/.github reusable workflows, images on GHCR): github
     GitLab (mbologna/ci-templates components, images on the project registry): gitlab
   default: github
-
-base_variant:
-  type: str
-  help: Runtime base image (slim is glibc and takes every wheel; alpine is smaller)
-  choices:
-    python:<version>-slim (Debian): slim
-    python:<version>-alpine (musl): alpine
-  default: slim
 
 notifications:
   type: bool
@@ -61,24 +79,195 @@ sample_code:
     template in a repository that already has its code)
   default: true
 
-smoke_cmd:
-  type: str
+main_module:
+  type: bool
   help: >-
-    GitHub only: the docker-ci smoke test, a shell command that exits 0 in
-    the built image without network or configuration
-  default: "{{ project_name }} --help"
-  when: "{{ forge == 'github' }}"
+    The package has a __main__.py, so `python -m <package>` runs main()
+    (coverage leaves that file out)
+  default: true
 
 coverage_fail_under:
   type: int
   help: Minimum total test coverage, in percent ([tool.coverage.report] fail_under)
   default: 80
 
+# --- The image --------------------------------------------------------------
+
+base_variant:
+  type: str
+  help: Runtime base image (slim is glibc and takes every wheel; alpine is smaller)
+  choices:
+    python:<version>-slim (Debian): slim
+    python:<version>-alpine (musl): alpine
+  default: slim
+
+entrypoint:
+  type: str
+  help: >-
+    How the image starts: one program is the ENTRYPOINT; an image with several
+    programs sets a default CMD, or none, and each deployment names one
+  choices:
+    ENTRYPOINT, one program (flags go in docker run arguments or Kubernetes args): entrypoint
+    CMD, several programs with a default one (a deployment's command replaces it): cmd
+    None, several programs and no default (each deployment sets its command): none
+  default: entrypoint
+
+script_target:
+  type: str
+  help: >-
+    The function behind the {{ project_name }} console script, as
+    module:function
+  default: "{{ package_name }}:main"
+  when: "{{ entrypoint != 'none' }}"
+  validator: >-
+    {% if not (script_target | regex_search('^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*:[a-zA-Z_][a-zA-Z0-9_]*$')) %}
+    Use module:function, e.g. {{ package_name }}.cli:main.
+    {% endif %}
+
+image_uid:
+  type: int
+  help: UID and GID the image runs as (USER uid:gid); never 0
+  default: 1000
+  validator: >-
+    {% if image_uid < 1 or image_uid > 2147483647 %}Use a UID from 1 to 2147483647.{% endif %}
+
+image_user:
+  type: str
+  help: >-
+    Name of an account to create for that UID, for software that needs a
+    passwd entry; empty runs as the bare UID
+  default: ""
+  validator: >-
+    {% if image_user and not (image_user | regex_search('^[a-z_][a-z0-9_-]*$')) %}
+    Use a lowercase account name, or leave it empty.
+    {% endif %}
+
+runtime_packages:
+  type: str
+  help: >-
+    Distribution packages the app needs at run time, separated by spaces
+    (apt on slim, apk on alpine)
+  default: ""
+  validator: >-
+    {% for p in runtime_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
+
+build_packages:
+  type: str
+  help: >-
+    Distribution packages only the build stage needs, e.g. a compiler for a
+    dependency without a wheel, separated by spaces
+  default: ""
+  validator: >-
+    {% for p in build_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
+
+runtime_env:
+  type: str
+  help: >-
+    Extra environment for the image, as NAME=value pairs separated by spaces
+    (an ENV line after the template's own)
+  default: ""
+  validator: >-
+    {% for p in runtime_env.split() %}{% if not (p | regex_search('^[A-Za-z_][A-Za-z0-9_]*=\\S*$')) %}Not NAME=value: {{ p }}. {% endif %}{% endfor %}
+
+writable_dirs:
+  type: str
+  help: >-
+    Directories the app writes to besides /tmp, separated by spaces: created
+    and owned by the image's UID, so a new volume mounted there is writable
+  default: ""
+  validator: >-
+    {% for p in writable_dirs.split() %}{% if not (p | regex_search('^/[A-Za-z0-9._/-]+$')) %}Not an absolute path: {{ p }}. {% endif %}{% endfor %}
+
+port:
+  type: int
+  help: >-
+    A web service's port: sets PORT and EXPOSE (Cloud Run and most runtimes
+    pass PORT); 0 for an app that serves nothing
+  default: 0
+  validator: >-
+    {% if port < 0 or port > 65535 %}Use a port from 1 to 65535, or 0.{% endif %}
+
+# --- CI and delivery --------------------------------------------------------
+
+releases:
+  type: bool
+  help: >-
+    GitHub: release vX.Y.Z tags with auto-release and publish only those; no
+    publishes every push to main as a sha-* image
+  default: true
+  when: "{{ forge == 'github' }}"
+
+cloud_run:
+  type: str
+  help: "GitHub: deploy each image published from main to Cloud Run"
+  choices:
+    No deployment: none
+    Cloud Run service: service
+    Cloud Run job: job
+  default: none
+  when: "{{ forge == 'github' and not releases }}"
+
+codecov:
+  type: bool
+  help: "GitHub: upload the coverage report to Codecov (needs CODECOV_TOKEN)"
+  default: false
+  when: "{{ forge == 'github' }}"
+
+smoke_cmd:
+  type: str
+  help: >-
+    {% if forge == 'github' -%}
+    The docker-ci smoke test, a shell command that exits 0 in the built image
+    without network or configuration
+    {%- else -%}
+    container-app's smoke test: auto (import every installed package), none,
+    or the arguments to run the image with
+    {%- endif %}
+  default: >-
+    {%- if forge == 'gitlab' -%}
+    auto
+    {%- elif entrypoint == 'none' -%}
+    python -c 'import {{ package_name }}'
+    {%- else -%}
+    {{ project_name }} --help
+    {%- endif %}
+
+extra_images:
+  type: str
+  help: >-
+    GitLab: subdirectories with a Dockerfile of their own, separated by
+    spaces; each builds a second image, $CI_REGISTRY_IMAGE/<subdirectory>
+  default: ""
+  when: "{{ forge == 'gitlab' }}"
+  validator: >-
+    {% for d in extra_images.split() %}{% if not (d | regex_search('^[a-z0-9][a-z0-9._-]*$')) %}Not a subdirectory name: {{ d }}. {% endif %}{% endfor %}
+
+owned_files:
+  type: str
+  help: >-
+    Files the project owns: written on the first copy, never rewritten by an
+    update (for a Dockerfile or CI too bespoke for the questions above)
+  multiselect: true
+  choices:
+    Dockerfile: Dockerfile
+    The CI file (.github/workflows/ci.yml or .gitlab-ci.yml): ci
+    .dockerignore: .dockerignore
+    .gitignore: .gitignore
+    .pre-commit-config.yaml: .pre-commit-config.yaml
+  default: []
+
 # Files the project owns after the first copy: an update never rewrites them.
+# owned_files adds to the list; an empty pattern matches nothing.
 _skip_if_exists:
   - README.md
   - AGENTS.md
+  - CLAUDE.md
   - LICENSE
+  - "{% if 'Dockerfile' in owned_files %}Dockerfile{% endif %}"
+  - "{% if 'ci' in owned_files %}{% if forge == 'github' %}.github/workflows/ci.yml{% else %}.gitlab-ci.yml{% endif %}{% endif %}"
+  - "{% if '.dockerignore' in owned_files %}.dockerignore{% endif %}"
+  - "{% if '.gitignore' in owned_files %}.gitignore{% endif %}"
+  - "{% if '.pre-commit-config.yaml' in owned_files %}.pre-commit-config.yaml{% endif %}"
 
 # No _tasks: copier refuses a template with tasks unless --trust is given,
 # and Renovate's copier manager runs without it. uv.lock is generated by
@@ -90,6 +279,11 @@ _message_after_copy: |
     uv lock
     uv run pytest && uv run ruff check . && uv run ruff format --check .
     pre-commit install
+  {%- if forge == 'gitlab' or releases %}
   Release by merging Conventional Commits: the weekly auto-release run tags
   vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
   placeholder (README.md, "Versions").
+  {%- else %}
+  Every push to main publishes the image as sha-<commit>{% if cloud_run != 'none' %} and deploys it
+  to Cloud Run{% endif %}. pyproject.toml's version stays a placeholder.
+  {%- endif %}
