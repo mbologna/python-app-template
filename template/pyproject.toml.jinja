@@ -5,6 +5,11 @@ name = "{{ project_name }}"
 # auto-release creates, and the image built from that tag carries the
 # version in its org.opencontainers.image.version label. Nothing reads this
 # field at run time.
+{%- elif changelog_releases %}
+# A placeholder, never bumped: each push to main publishes its image as
+# latest and sha-<commit>, and the git tag vX.Y.Z that auto-release creates
+# marks a changelog entry with no image of its own. Nothing reads this field
+# at run time.
 {%- else %}
 # A placeholder, never bumped: this project has no releases, and each push
 # to main publishes its image as sha-<commit>. Nothing reads this field at

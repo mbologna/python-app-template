@@ -18,7 +18,7 @@ stay as the template renders them.
 | Image | Two stages. A hash-pinned uv (`requirements-uv.txt`) runs `uv sync --locked --no-dev` into `/opt/venv`, dependencies in a layer of their own. The runtime stage is the same `python:<version>-slim` or `-alpine` digest without pip or ensurepip, with the distribution's security updates applied at build time, running as a non-root UID with OCI labels and a read-only root filesystem |
 | Dependencies | `uv.lock`, a 7-day `exclude-newer` cooldown, `renovate.json` extending [`mbologna/.github`](https://github.com/mbologna/.github)'s shared preset |
 | Notifications | Optional: [apprise-notify-py](https://github.com/mbologna/apprise-notify-py), with `APPRISE_URL` holding one Apprise API URL or several space-separated ones tried in order |
-| CI | GitHub: callers of `mbologna/.github`'s `python-ci` and `docker-ci`, pinned by SHA, with a gating smoke test, and either auto-release's `conventional` releases or a push-to-main image with an optional Cloud Run deploy. GitLab: `base`, `container-app` (commit check, hadolint, kaniko-build and auto-release) and `python-test` from [ci-templates](https://gitlab.com/mbologna/ci-templates), all at one version |
+| CI | GitHub: callers of `mbologna/.github`'s `python-ci` and `docker-ci`, pinned by SHA, with a gating smoke test and one of three [release modes](#release-modes), with an optional Cloud Run deploy when every push publishes. GitLab: `base`, `container-app` (commit check, hadolint, kaniko-build and auto-release) and `python-test` from [ci-templates](https://gitlab.com/mbologna/ci-templates), all at one version |
 | Repository files | `AGENTS.md`, `CLAUDE.md`, `README.md`, `.pre-commit-config.yaml`, `.dockerignore`, `.gitignore`, `LICENSE` (MIT, Apache-2.0 or GPL-3.0-only) |
 
 ## New project
@@ -72,8 +72,9 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 
 | Question | Default | Effect |
 |---|---|---|
-| `releases` | yes | GitHub. Yes: auto-release tags `vX.Y.Z` (weekly, `conventional`) and only tags publish the image. No: every push to main publishes `sha-<commit>`; no tags, no schedule, no `contents: write` |
-| `cloud_run` | `none` | GitHub, without releases: `service` or `job` deploys each image published from main to Cloud Run (docker-ci's `deploy_type`) |
+| `releases` | yes | GitHub. Yes: image releases, where only `vX.Y.Z` tags publish the image. No: every push to main publishes it. See [Release modes](#release-modes) |
+| `changelog_releases` | no | GitHub, with `releases: false`: auto-release still tags `vX.Y.Z` weekly with a GitHub Release, as a changelog. See [Release modes](#release-modes) |
+| `cloud_run` | `none` | GitHub, with `releases: false`: `service` or `job` deploys each image published from main to Cloud Run (docker-ci's `deploy_type`) |
 | `codecov` | no | GitHub: uploads the coverage report to Codecov |
 | `smoke_cmd` | GitHub: `<project_name> --help`; GitLab: `auto` | GitHub: a shell command docker-ci runs in the image (entry point overridden, no network) that must exit 0. GitLab: container-app's `smoke_cmd`, which is `auto` (import every installed package), `none`, or the arguments to run the image with |
 | `extra_images` | empty | GitLab: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input, and a release rebuilds only the images whose files changed |
@@ -83,6 +84,31 @@ Docker Hub pushes are off in every generated project.
 
 Every question added since v1.1.3 defaults to what v1.1.3 rendered: an
 update that answers none of them brings only the release's fixes.
+
+## Release modes
+
+On GitHub, `releases` and `changelog_releases` pick one of three modes.
+The two that tag use auto-release's `conventional` strategy, which tags on
+Monday's schedule when a `feat`, `fix`, `perf`, `revert` or breaking commit
+landed or dependency updates wait for a maintenance release, and on a push
+to main only for a CVE fix.
+
+| Mode | Answers | Tags and Releases | Images | Cloud Run |
+|---|---|---|---|---|
+| Image releases | `releases: true` (the default) | docker-ci's `release_strategy` tags `vX.Y.Z` and dispatches the tag's build | Only tags publish, as `X.Y.Z`, `X.Y` and `latest`; the registry cleanup keeps every version | No |
+| Changelog | `releases: false`, `changelog_releases: true` | A separate job calls `auto-release.yml` with `dispatch_tag_build: false`: the tag and its Release record what main already shipped, and build nothing | Every push to main publishes `latest` and `sha-<commit>` | Optional |
+| None | `releases: false` | None: no tags, no schedule, no `contents: write` | Every push to main publishes `latest` and `sha-<commit>` | Optional |
+
+The changelog mode suits an app deployed per commit that still wants weekly
+release notes. Its docker job keeps `contents: read`, the workflow has no
+`tags:` trigger, and auto-release gets no `image` input: with no `X.Y.Z`
+image to scan, it never cuts a fresh-rebuild release, while its base image
+check still reads `Dockerfile`. On GitLab, ci-templates' `container-app`
+builds images only from release tags, so only image releases exist there
+and both questions are skipped.
+
+When every push publishes, the `sha-*` images are the rollback window, and
+a Cloud Run deploy points the service or job at the pushed image's digest.
 
 ## Entry points
 
@@ -180,20 +206,22 @@ project's own.
 ## Versions
 
 A generated project keeps `version = "0.0.0"` in `pyproject.toml`. With
-releases on, its releases are git tags `vX.Y.Z` that auto-release creates
-on the weekly schedule; only a tag builds and pushes the image, and the
-pipeline sets the image's `org.opencontainers.image.version` label from
-that tag. With releases off, each push to main publishes `sha-<commit>`.
-Nothing needs the version inside the package, so nothing has to be bumped.
+image releases, its releases are git tags `vX.Y.Z` that auto-release
+creates on the weekly schedule; only a tag builds and pushes the image, and
+the pipeline sets the image's `org.opencontainers.image.version` label from
+that tag. In the changelog mode the tags are release notes only, and each
+push to main publishes `latest` and `sha-<commit>`, as it does with no
+releases at all. Nothing needs the version inside the package, so nothing
+has to be bumped.
 
 This template is versioned the same way: Monday's CI run tags it when a
 `feat`, `fix`, `perf`, `revert` or breaking commit landed.
 
 ## Development
 
-CI renders the template in five answer combinations covering both forges,
-both base images, the three entry-point styles, every licence kind and the
-image questions. Each result runs ruff, its tests with the coverage gate,
+CI renders the template in six answer combinations covering both forges,
+the three release modes, both base images, the three entry-point styles,
+every licence kind and the image questions. Each result runs ruff, its tests with the coverage gate,
 pre-commit, hadolint, an image build, a smoke test on a read-only root
 filesystem and checks of the image's user, exposed port and the absence of
 pip, uv and git. A second job copies a project from the latest release,
