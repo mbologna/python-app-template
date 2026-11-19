@@ -7,6 +7,8 @@ _subdirectory: template
 _templates_suffix: .jinja
 _answers_file: .copier-answers.yml
 
+# --- The project ------------------------------------------------------------
+
 project_name:
   type: str
   help: Distribution, console script and image name (lowercase, hyphens)
@@ -41,14 +43,6 @@ forge:
     GitLab (mbologna/ci-templates components, images on the project registry): gitlab
   default: github
 
-base_variant:
-  type: str
-  help: Runtime base image (slim is glibc and takes every wheel; alpine is smaller)
-  choices:
-    python:<version>-slim (Debian): slim
-    python:<version>-alpine (musl): alpine
-  default: slim
-
 notifications:
   type: bool
   help: Send notifications through an Apprise API server (apprise-notify-py, APPRISE_URL)
@@ -61,6 +55,23 @@ sample_code:
     template in a repository that already has its code)
   default: true
 
+coverage_fail_under:
+  type: int
+  help: Minimum total test coverage, in percent ([tool.coverage.report] fail_under)
+  default: 80
+
+# --- The image --------------------------------------------------------------
+
+base_variant:
+  type: str
+  help: Runtime base image (slim is glibc and takes every wheel; alpine is smaller)
+  choices:
+    python:<version>-slim (Debian): slim
+    python:<version>-alpine (musl): alpine
+  default: slim
+
+# --- CI and delivery --------------------------------------------------------
+
 smoke_cmd:
   type: str
   help: >-
@@ -68,11 +79,6 @@ smoke_cmd:
     the built image without network or configuration
   default: "{{ project_name }} --help"
   when: "{{ forge == 'github' }}"
-
-coverage_fail_under:
-  type: int
-  help: Minimum total test coverage, in percent ([tool.coverage.report] fail_under)
-  default: 80
 
 # Files the project owns after the first copy: an update never rewrites them.
 _skip_if_exists:
