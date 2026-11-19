@@ -3,16 +3,26 @@ name: CI
 "on":
   push:
     branches: [main]
+{%- if releases %}
     tags: ["v*.*.*"]
+{%- endif %}
   pull_request:
+{%- if releases %}
   schedule:
     - cron: "0 6 * * 1"
+{%- endif %}
   workflow_dispatch:
 
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+{%- if releases %}
   # Never cancel a run on the default branch: it may be releasing, and a cut
   # release leaves a tag without its Release.
+{%- elif cloud_run != 'none' %}
+  # Never cancel a run on the default branch: it may be deploying.
+{%- else %}
+  # Never cancel a run on the default branch: it may be pushing the image.
+{%- endif %}
   cancel-in-progress: {% raw %}${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}{% endraw %}
 
 permissions:
@@ -25,11 +35,12 @@ jobs:
     uses: mbologna/.github/.github/workflows/python-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       python_version: "3.15"
-      enable_codecov: false
+      enable_codecov: {{ codecov | lower }}
     secrets: inherit
 
   docker:
     needs: python
+{%- if releases %}
     # contents: the release tag and its Release; actions: dispatch the tag
     # build (a tag pushed with GITHUB_TOKEN triggers no run); the rest:
     # push, sign and scan the image.
@@ -40,19 +51,46 @@ jobs:
       attestations: write
       security-events: write
       actions: write
+{%- else %}
+    # Push, sign and scan the image{% if cloud_run != 'none' %}, and deploy it{% endif %}.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+{%- endif %}
     uses: mbologna/.github/.github/workflows/docker-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       image_name: {{ project_name }}
+{%- if releases %}
       # Only release tags publish the image (auto-release dispatches
       # their build); pull requests build it without pushing.
       publish: release
+{%- else %}
+      # Every push to main publishes the image, tagged sha-<commit>;
+      # pull requests build it without pushing.
+      publish: push
+{%- endif %}
       push_to_dockerhub: false
-      # The image must start before anything is tagged: run without network
+      # The image must start before anything is {% if releases %}tagged{% else %}pushed{% endif %}: run without network
       # or configuration, this exits 0 only when the code and its
       # dependencies import.
       smoke_cmd: '{{ smoke_cmd | replace("'", "''") }}'
+{%- if releases %}
       # auto-release runs inside docker-ci: Monday's schedule releases with
       # this strategy (and a maintenance release for dependency updates), a
       # push to main only a CVE fix.
       release_strategy: conventional
+{%- else %}
+      # No release_strategy: every push to main publishes its own sha-*
+      # image, so a version tag would mark nothing that runs.
+{%- endif %}
+{%- if cloud_run != 'none' %}
+      # Points the Cloud Run {{ cloud_run }} at the image of each push or manual
+      # run on main that builds one; a docs- or CI-only push deploys nothing.
+      # Needs the GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT
+      # secrets.
+      deploy_type: {{ cloud_run }}
+{%- endif %}
     secrets: inherit

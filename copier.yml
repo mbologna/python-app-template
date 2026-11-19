@@ -185,6 +185,30 @@ port:
 
 # --- CI and delivery --------------------------------------------------------
 
+releases:
+  type: bool
+  help: >-
+    GitHub: release vX.Y.Z tags with auto-release and publish only those; no
+    publishes every push to main as a sha-* image
+  default: true
+  when: "{{ forge == 'github' }}"
+
+cloud_run:
+  type: str
+  help: "GitHub: deploy each image published from main to Cloud Run"
+  choices:
+    No deployment: none
+    Cloud Run service: service
+    Cloud Run job: job
+  default: none
+  when: "{{ forge == 'github' and not releases }}"
+
+codecov:
+  type: bool
+  help: "GitHub: upload the coverage report to Codecov (needs CODECOV_TOKEN)"
+  default: false
+  when: "{{ forge == 'github' }}"
+
 smoke_cmd:
   type: str
   help: >-
@@ -215,6 +239,11 @@ _message_after_copy: |
     uv lock
     uv run pytest && uv run ruff check . && uv run ruff format --check .
     pre-commit install
+  {%- if forge == 'gitlab' or releases %}
   Release by merging Conventional Commits: the weekly auto-release run tags
   vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
   placeholder (README.md, "Versions").
+  {%- else %}
+  Every push to main publishes the image as sha-<commit>{% if cloud_run != 'none' %} and deploys it
+  to Cloud Run{% endif %}. pyproject.toml's version stays a placeholder.
+  {%- endif %}

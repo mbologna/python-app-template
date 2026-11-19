@@ -1,9 +1,14 @@
 name: Commits
-
+{% if releases %}
 # Pull requests merge with a merge commit, so every commit lands on the
 # default branch as it is, and auto-release reads the subjects: each must
 # follow the commit rules (mbologna/commitlint-config), and no fixup! commit
 # may remain.
+{%- else %}
+# Pull requests merge with a merge commit, so every commit lands on the
+# default branch as it is: each must follow the commit rules
+# (mbologna/commitlint-config), and no fixup! commit may remain.
+{%- endif %}
 
 "on":
   pull_request:

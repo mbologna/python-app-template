@@ -1,5 +1,6 @@
 {%- set slim = base_variant != "alpine" -%}
 {%- set has_license_file = license not in ["none"] -%}
+{%- set ships_releases = forge == "gitlab" or releases -%}
 # Build stage: a pinned uv installs exactly what uv.lock pins into
 # /opt/venv. Same base image and digest as the runtime stage, so compiled
 # wheels match the Python they run on.
@@ -49,8 +50,13 @@ FROM python:3.15.2-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced1
 {%- else -%}
 FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 {%- endif %}
+{%- if ships_releases %}
 # The CI pipeline adds org.opencontainers.image.source and .revision, and
 # .version from the release tag (pyproject.toml's version is a placeholder).
+{%- else %}
+# The CI pipeline adds org.opencontainers.image.source and .revision; there
+# are no release tags, so no .version (pyproject.toml's is a placeholder).
+{%- endif %}
 LABEL org.opencontainers.image.title="{{ project_name }}" \
       org.opencontainers.image.description="{{ description }}"
 {%- if license != "none" %} \
@@ -95,8 +101,12 @@ RUN {{ steps | join(" \\\n    && ") }}
 {%- endif %}
 # The distribution's security fixes published since the base image was
 # built: Docker's official images are rebuilt only every week or few.
+{%- if ships_releases %}
 # auto-release's fresh rebuild counts the base image's findings because of
 # this line, so a fix ships within a week without a base image update.
+{%- else %}
+# Each push to main that rebuilds the image takes the fixes released since.
+{%- endif %}
 {%- if runtime_packages.split() %}
 # Then the packages the app needs at run time, unpinned: the base image
 # digest fixes the distribution release they come from.

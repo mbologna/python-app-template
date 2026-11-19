@@ -1,9 +1,15 @@
 [project]
 name = "{{ project_name }}"
+{%- if forge == 'gitlab' or releases %}
 # A placeholder, never bumped: a release is the git tag vX.Y.Z that
 # auto-release creates, and the image built from that tag carries the
 # version in its org.opencontainers.image.version label. Nothing reads this
 # field at run time.
+{%- else %}
+# A placeholder, never bumped: this project has no releases, and each push
+# to main publishes its image as sha-<commit>. Nothing reads this field at
+# run time.
+{%- endif %}
 version = "0.0.0"
 description = "{{ description }}"
 readme = "README.md"
