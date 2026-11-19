@@ -62,4 +62,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 {%- endif %}
 USER 1000:1000
+{%- if entrypoint == "entrypoint" %}
 ENTRYPOINT ["{{ project_name }}"]
+{%- elif entrypoint == "cmd" %}
+# Several programs: {{ project_name }} by default, and a deployment's command
+# (or `docker run <image> <script>`) picks another from [project.scripts].
+CMD ["{{ project_name }}"]
+{%- else %}
+# Several programs and no default: each deployment's command (or
+# `docker run <image> <script>`) names one from [project.scripts].
+{%- endif %}

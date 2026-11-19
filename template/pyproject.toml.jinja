@@ -24,7 +24,12 @@ dependencies = [
 ]
 
 [project.scripts]
-{{ project_name }} = "{{ package_name }}:main"
+{%- if entrypoint == 'none' %}
+# Several programs and no default: each deployment runs one of these.
+{%- endif %}
+{%- if entrypoint != 'none' or sample_code %}
+{{ project_name }} = "{{ script_target }}"
+{%- endif %}
 
 [build-system]
 requires = ["uv_build>=0.13,<0.14"]

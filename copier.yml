@@ -97,6 +97,29 @@ base_variant:
     python:<version>-alpine (musl): alpine
   default: slim
 
+entrypoint:
+  type: str
+  help: >-
+    How the image starts: one program is the ENTRYPOINT; an image with several
+    programs sets a default CMD, or none, and each deployment names one
+  choices:
+    ENTRYPOINT, one program (flags go in docker run arguments or Kubernetes args): entrypoint
+    CMD, several programs with a default one (a deployment's command replaces it): cmd
+    None, several programs and no default (each deployment sets its command): none
+  default: entrypoint
+
+script_target:
+  type: str
+  help: >-
+    The function behind the {{ project_name }} console script, as
+    module:function
+  default: "{{ package_name }}:main"
+  when: "{{ entrypoint != 'none' }}"
+  validator: >-
+    {% if not (script_target | regex_search('^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*:[a-zA-Z_][a-zA-Z0-9_]*$')) %}
+    Use module:function, e.g. {{ package_name }}.cli:main.
+    {% endif %}
+
 # --- CI and delivery --------------------------------------------------------
 
 smoke_cmd:
@@ -104,7 +127,12 @@ smoke_cmd:
   help: >-
     GitHub only: the docker-ci smoke test, a shell command that exits 0 in
     the built image without network or configuration
-  default: "{{ project_name }} --help"
+  default: >-
+    {%- if entrypoint == 'none' -%}
+    python -c 'import {{ package_name }}'
+    {%- else -%}
+    {{ project_name }} --help
+    {%- endif %}
   when: "{{ forge == 'github' }}"
 
 # Files the project owns after the first copy: an update never rewrites them.
