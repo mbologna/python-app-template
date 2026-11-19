@@ -1,6 +1,6 @@
 # Shared pipeline (mbologna/ci-templates), all components at one version:
-# - merge requests: the title check (container-app includes
-#   conventional-title), hadolint when the Dockerfile changed, ruff and the
+# - merge requests: the commit check (container-app includes commits),
+#   hadolint when the Dockerfile changed, ruff and the
 #   tests with the coverage gate (fail_under in pyproject.toml) and
 #   pip-audit, and a no-push build check with the image policy check;
 # - a push to main: only a CVE fix releases;
@@ -10,16 +10,11 @@
 # - a vX.Y.Z tag: build, policy check, smoke test (smoke_cmd auto imports
 #   every installed package), Trivy report, push X.Y.Z, X.Y and latest, sign.
 include:
-  - component: gitlab.com/mbologna/ci-templates/base@7.0.0
-  - component: gitlab.com/mbologna/ci-templates/container-app@7.0.0
+  - component: gitlab.com/mbologna/ci-templates/base@7.3.0
+  - component: gitlab.com/mbologna/ci-templates/container-app@7.3.0
     inputs:
       strategy: conventional
-  - component: gitlab.com/mbologna/ci-templates/python-test@7.0.0
-{%- if notifications %}
-    inputs:
-      # apprise-notify is a git dependency.
-      system_packages: git
-{%- endif %}
+  - component: gitlab.com/mbologna/ci-templates/python-test@7.3.0
 
 test:
   # The Python the image ships: the Dockerfile's final stage, which the
