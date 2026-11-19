@@ -212,15 +212,31 @@ codecov:
 smoke_cmd:
   type: str
   help: >-
-    GitHub only: the docker-ci smoke test, a shell command that exits 0 in
-    the built image without network or configuration
+    {% if forge == 'github' -%}
+    The docker-ci smoke test, a shell command that exits 0 in the built image
+    without network or configuration
+    {%- else -%}
+    container-app's smoke test: auto (import every installed package), none,
+    or the arguments to run the image with
+    {%- endif %}
   default: >-
-    {%- if entrypoint == 'none' -%}
+    {%- if forge == 'gitlab' -%}
+    auto
+    {%- elif entrypoint == 'none' -%}
     python -c 'import {{ package_name }}'
     {%- else -%}
     {{ project_name }} --help
     {%- endif %}
-  when: "{{ forge == 'github' }}"
+
+extra_images:
+  type: str
+  help: >-
+    GitLab: subdirectories with a Dockerfile of their own, separated by
+    spaces; each builds a second image, $CI_REGISTRY_IMAGE/<subdirectory>
+  default: ""
+  when: "{{ forge == 'gitlab' }}"
+  validator: >-
+    {% for d in extra_images.split() %}{% if not (d | regex_search('^[a-z0-9][a-z0-9._-]*$')) %}Not a subdirectory name: {{ d }}. {% endif %}{% endfor %}
 
 # Files the project owns after the first copy: an update never rewrites them.
 _skip_if_exists:
