@@ -120,6 +120,69 @@ script_target:
     Use module:function, e.g. {{ package_name }}.cli:main.
     {% endif %}
 
+image_uid:
+  type: int
+  help: UID and GID the image runs as (USER uid:gid); never 0
+  default: 1000
+  validator: >-
+    {% if image_uid < 1 or image_uid > 2147483647 %}Use a UID from 1 to 2147483647.{% endif %}
+
+image_user:
+  type: str
+  help: >-
+    Name of an account to create for that UID, for software that needs a
+    passwd entry; empty runs as the bare UID
+  default: ""
+  validator: >-
+    {% if image_user and not (image_user | regex_search('^[a-z_][a-z0-9_-]*$')) %}
+    Use a lowercase account name, or leave it empty.
+    {% endif %}
+
+runtime_packages:
+  type: str
+  help: >-
+    Distribution packages the app needs at run time, separated by spaces
+    (apt on slim, apk on alpine)
+  default: ""
+  validator: >-
+    {% for p in runtime_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
+
+build_packages:
+  type: str
+  help: >-
+    Distribution packages only the build stage needs, e.g. a compiler for a
+    dependency without a wheel, separated by spaces
+  default: ""
+  validator: >-
+    {% for p in build_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
+
+runtime_env:
+  type: str
+  help: >-
+    Extra environment for the image, as NAME=value pairs separated by spaces
+    (an ENV line after the template's own)
+  default: ""
+  validator: >-
+    {% for p in runtime_env.split() %}{% if not (p | regex_search('^[A-Za-z_][A-Za-z0-9_]*=\\S*$')) %}Not NAME=value: {{ p }}. {% endif %}{% endfor %}
+
+writable_dirs:
+  type: str
+  help: >-
+    Directories the app writes to besides /tmp, separated by spaces: created
+    and owned by the image's UID, so a new volume mounted there is writable
+  default: ""
+  validator: >-
+    {% for p in writable_dirs.split() %}{% if not (p | regex_search('^/[A-Za-z0-9._/-]+$')) %}Not an absolute path: {{ p }}. {% endif %}{% endfor %}
+
+port:
+  type: int
+  help: >-
+    A web service's port: sets PORT and EXPOSE (Cloud Run and most runtimes
+    pass PORT); 0 for an app that serves nothing
+  default: 0
+  validator: >-
+    {% if port < 0 or port > 65535 %}Use a port from 1 to 65535, or 0.{% endif %}
+
 # --- CI and delivery --------------------------------------------------------
 
 smoke_cmd:

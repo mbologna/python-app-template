@@ -1,3 +1,4 @@
+{%- set slim = base_variant != "alpine" -%}
 {%- set has_license_file = license not in ["none"] -%}
 # Build stage: a pinned uv installs exactly what uv.lock pins into
 # /opt/venv. Same base image and digest as the runtime stage, so compiled
@@ -8,6 +9,20 @@ FROM python:3.15.2-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced1
 FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 {%- endif %}
 
+{% if build_packages.split() -%}
+# Packages only the build needs, for dependencies built from source; the
+# runtime stage takes nothing but /opt/venv from here. Unpinned: the base
+# image digest fixes the distribution release they come from.
+{% if slim -%}
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends {{ build_packages.split() | join(" ") }} \
+    && rm -rf /var/lib/apt/lists/*
+{% else -%}
+# hadolint ignore=DL3018
+RUN apk add --no-cache {{ build_packages.split() | join(" ") }}
+{% endif -%}
+{% endif -%}
 # uv from PyPI, hash-checked (requirements-uv.txt says why).
 COPY requirements-uv.txt /tmp/
 RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes -r /tmp/requirements-uv.txt
@@ -45,23 +60,69 @@ COPY --from=build /opt/venv /opt/venv
 # Run-time writes go to /tmp (HOME too), so the root filesystem can be
 # read-only.
 ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HOME=/tmp
+{%- if port or runtime_env.split() %}
+{%- if port %}
+# PORT: where the server listens. Cloud Run and most container runtimes set
+# it; {{ port }} otherwise.
+{%- endif %}
+ENV {% if port %}PORT={{ port }}{% if runtime_env.split() %} {% endif %}{% endif %}{{ runtime_env.split() | join(" ") }}
+{%- endif %}
 # The base image's pip (with the packages it vendors) and ensurepip's
 # bundled pip wheel are never used at run time; removing them keeps their
 # CVEs out of the image.
 RUN /usr/local/bin/python3 -m pip uninstall -y --root-user-action=ignore pip \
     && rm -rf /usr/local/lib/python3*/ensurepip
+{%- if image_user or writable_dirs.split() %}
+{%- set steps = [] %}
+{%- if image_user and slim %}
+{%- set _ = steps.append("groupadd -g %d %s && useradd -r -u %d -g %d -d /nonexistent -s /usr/sbin/nologin %s" | format(image_uid, image_user, image_uid, image_uid, image_user)) %}
+{%- elif image_user %}
+{%- set _ = steps.append("addgroup -S -g %d %s && adduser -S -D -H -u %d -G %s -h /nonexistent -s /sbin/nologin %s" | format(image_uid, image_user, image_uid, image_user, image_user)) %}
+{%- endif %}
+{%- if writable_dirs.split() %}
+{%- set _ = steps.append("mkdir -p %s && chown %d:%d %s" | format(writable_dirs.split() | join(" "), image_uid, image_uid, writable_dirs.split() | join(" "))) %}
+{%- endif %}
+{%- if image_user %}
+# A named account for the UID, for software that looks it up in
+# /etc/passwd, with a fixed GID so volumes see the same numbers on every
+# build.
+{%- endif %}
+{%- if writable_dirs.split() %}
+# The directories the app writes to besides /tmp, owned by its UID, so a
+# new volume mounted on one starts writable.
+{%- endif %}
+RUN {{ steps | join(" \\\n    && ") }}
+{%- endif %}
 # The distribution's security fixes published since the base image was
 # built: Docker's official images are rebuilt only every week or few.
 # auto-release's fresh rebuild counts the base image's findings because of
 # this line, so a fix ships within a week without a base image update.
+{%- if runtime_packages.split() %}
+# Then the packages the app needs at run time, unpinned: the base image
+# digest fixes the distribution release they come from.
+{%- if slim %}
+# hadolint ignore=DL3008
+{%- else %}
+# hadolint ignore=DL3018
+{%- endif %}
+{%- endif %}
 {% if base_variant == "alpine" -%}
 RUN apk upgrade --no-cache
+{%- if runtime_packages.split() %} \
+    && apk add --no-cache {{ runtime_packages.split() | join(" ") }}
+{%- endif %}
 {%- else -%}
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+{%- if runtime_packages.split() %}
+    && apt-get install -y --no-install-recommends {{ runtime_packages.split() | join(" ") }} \
+{%- endif %}
     && rm -rf /var/lib/apt/lists/*
 {%- endif %}
-USER 1000:1000
+USER {{ image_uid }}:{{ image_uid }}
+{%- if port %}
+EXPOSE {{ port }}
+{%- endif %}
 {%- if entrypoint == "entrypoint" %}
 ENTRYPOINT ["{{ project_name }}"]
 {%- elif entrypoint == "cmd" %}
