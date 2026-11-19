@@ -55,13 +55,8 @@ repos:
     hooks:
       - id: hadolint
 
-  # The commit subjects that reach main are the release notes: keep commits
-  # Conventional.
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.5.0
-    hooks:
-      - id: conventional-pre-commit
-        stages: [commit-msg]
-
-default_install_hook_types: [pre-commit, commit-msg]
+# No commit-msg hook here: the commit rules (commitlint-config-mbologna) are
+# checked locally by the dotfiles' global commit-msg hook and in CI on every
+# pull or merge request commit, so a second, weaker local check only drifts.
+default_install_hook_types: [pre-commit]
 default_stages: [pre-commit]
