@@ -15,6 +15,12 @@ with any question you add or change.
   that renders empty matches nothing.
 - No `_tasks`: a template with tasks needs `--trust`, and Renovate's copier
   manager runs without it.
+- GitHub's three release modes come from two questions: `releases` (image
+  releases) and, when it is false, `changelog_releases` (tags and GitHub
+  Releases as a changelog, images per push). A template that branches on
+  the mode tests `releases` first, then `changelog_releases`, so an answers
+  file from before `changelog_releases` renders as it did. README, "Release
+  modes".
 
 ## Rules for changes
 

@@ -30,6 +30,17 @@
   [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
 - Releases are tags; `pyproject.toml`'s version stays `0.0.0`.
+{%- elif changelog_releases -%}
+- Conventional Commits, header at most 72 characters. The commit subjects
+  that reach main are the changelog: `feat`/`fix`/`perf` release, `refactor`,
+  `test`, `docs`, `ci`, `chore` don't (a dependency update to runtime files
+  goes into the weekly maintenance release). CI lints every commit with
+  [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
+  and rejects `fixup!` commits; pull requests merge with a merge commit.
+- Every push to main that changes the image publishes it as `latest` and
+  `sha-<commit>`{% if cloud_run != 'none' %} and deploys it, by digest, to the Cloud Run {{ cloud_run }}{% endif %}.
+  Release tags `vX.Y.Z` and their GitHub Releases are a changelog: they
+  build no image. `pyproject.toml`'s version stays `0.0.0`.
 {%- else -%}
 - Conventional Commits, header at most 72 characters. CI lints every commit
   with [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)

@@ -189,13 +189,28 @@ port:
 
 # --- CI and delivery --------------------------------------------------------
 
+# Three release modes on GitHub, from two questions so that answers files
+# written before changelog_releases render as they did:
+# - releases: image releases; auto-release tags vX.Y.Z and only tags publish;
+# - not releases, changelog_releases: every push to main publishes, and
+#   auto-release still tags vX.Y.Z with a GitHub Release, as a changelog;
+# - neither: every push to main publishes, with no tags at all.
 releases:
   type: bool
   help: >-
     GitHub: release vX.Y.Z tags with auto-release and publish only those; no
-    publishes every push to main as a sha-* image
+    publishes every push to main (latest and sha-*)
   default: true
   when: "{{ forge == 'github' }}"
+
+changelog_releases:
+  type: bool
+  help: >-
+    GitHub, publishing every push: still tag vX.Y.Z weekly with auto-release
+    and publish a GitHub Release of the commit subjects, as a changelog (the
+    tags build nothing)
+  default: false
+  when: "{{ forge == 'github' and not releases }}"
 
 cloud_run:
   type: str
@@ -283,6 +298,11 @@ _message_after_copy: |
   Release by merging Conventional Commits: the weekly auto-release run tags
   vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
   placeholder (README.md, "Versions").
+  {%- elif changelog_releases %}
+  Every push to main publishes the image as latest and sha-<commit>{% if cloud_run != 'none' %} and deploys
+  it to Cloud Run{% endif %}. The weekly auto-release run tags vX.Y.Z with a
+  GitHub Release of the commit subjects, as a changelog; the tag builds
+  nothing. pyproject.toml's version stays a placeholder.
   {%- else %}
   Every push to main publishes the image as sha-<commit>{% if cloud_run != 'none' %} and deploys it
   to Cloud Run{% endif %}. pyproject.toml's version stays a placeholder.

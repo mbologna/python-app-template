@@ -1,6 +1,6 @@
 {%- set ships_releases = forge == 'gitlab' or releases -%}
 {%- set registry = 'ghcr.io/mbologna' if forge == 'github' else 'registry.gitlab.com/mbologna' -%}
-{%- set image = registry ~ '/' ~ project_name ~ ':' ~ ('latest' if ships_releases else 'sha-<commit>') -%}
+{%- set image = registry ~ '/' ~ project_name ~ ':' ~ ('latest' if ships_releases or changelog_releases else 'sha-<commit>') -%}
 # {{ project_name }}
 
 {{ description }}
@@ -48,6 +48,17 @@ a CVE fix releases on the push that brings it. Only a tag builds and pushes
 the image, as `X.Y.Z`, `X.Y` and `latest`, with the version in its
 `org.opencontainers.image.version` label. `version` in `pyproject.toml` is a
 placeholder and stays `0.0.0`.
+{%- elif changelog_releases -%}
+Every push to main that changes the image publishes it as `latest` and
+`sha-<commit>`{% if cloud_run != 'none' %} and deploys it, by digest, to the Cloud Run {{ cloud_run }}{% endif %}.
+The `sha-*` images are the rollback window.
+
+Releases are the git tags `vX.Y.Z` and their GitHub Releases, a changelog
+of what main already {% if cloud_run != 'none' %}deployed{% else %}published{% endif %}. A weekly CI run (Monday 06:00 UTC) tags
+the next version when a `feat`, `fix`, `perf`, `revert` or breaking commit
+landed, or a maintenance patch when dependency updates are waiting; a CVE
+fix releases on the push that brings it. A tag builds no image. `version`
+in `pyproject.toml` is a placeholder and stays `0.0.0`.
 {%- else -%}
 There are no releases. Every push to main that changes the image publishes
 it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.

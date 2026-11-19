@@ -53,6 +53,10 @@ FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc
 {%- if ships_releases %}
 # The CI pipeline adds org.opencontainers.image.source and .revision, and
 # .version from the release tag (pyproject.toml's version is a placeholder).
+{%- elif changelog_releases %}
+# The CI pipeline adds org.opencontainers.image.source and .revision; the
+# release tags are a changelog and build nothing, so no .version
+# (pyproject.toml's is a placeholder).
 {%- else %}
 # The CI pipeline adds org.opencontainers.image.source and .revision; there
 # are no release tags, so no .version (pyproject.toml's is a placeholder).
