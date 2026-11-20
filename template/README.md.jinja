@@ -1,6 +1,6 @@
 {%- set ships_releases = forge == 'gitlab' or releases -%}
 {%- set registry = 'ghcr.io/mbologna' if forge == 'github' else 'registry.gitlab.com/mbologna' -%}
-{%- set image = registry ~ '/' ~ project_name ~ ':' ~ ('latest' if ships_releases or changelog_releases else 'sha-<commit>') -%}
+{%- set image = registry ~ '/' ~ project_name ~ ':latest' -%}
 # {{ project_name }}
 
 {{ description }}
@@ -68,7 +68,7 @@ builds no image. `version` in `pyproject.toml` is a placeholder and stays
 [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- else -%}
 Unversioned: there are no releases or tags. Every push to main that changes
-the image publishes it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
+the image publishes it as `latest` and `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
 `version` in `pyproject.toml` is a placeholder and stays `0.0.0`. See the
 [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- endif %}

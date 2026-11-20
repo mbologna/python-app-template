@@ -304,6 +304,6 @@ _message_after_copy: |
   GitHub Release of the commit subjects, as a changelog; the tag builds
   nothing. pyproject.toml's version stays a placeholder.
   {%- else %}
-  Every push to main publishes the image as sha-<commit>{% if cloud_run != 'none' %} and deploys it
-  to Cloud Run{% endif %}. pyproject.toml's version stays a placeholder.
+  Every push to main publishes the image as latest and sha-<commit>{% if cloud_run != 'none' %} and deploys
+  it to Cloud Run{% endif %}. pyproject.toml's version stays a placeholder.
   {%- endif %}

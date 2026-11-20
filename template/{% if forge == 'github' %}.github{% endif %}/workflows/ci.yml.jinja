@@ -77,8 +77,8 @@ jobs:
       # sha-<commit>; pull requests build it without pushing. The release
       # tags build nothing.
 {%- else %}
-      # Every push to main publishes the image, tagged sha-<commit>;
-      # pull requests build it without pushing.
+      # Every push to main publishes the image, tagged latest and
+      # sha-<commit>; pull requests build it without pushing.
 {%- endif %}
       publish: push
 {%- endif %}
