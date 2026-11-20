@@ -1,6 +1,6 @@
 {%- set ships_releases = forge == 'gitlab' or releases -%}
 {%- set registry = 'ghcr.io/mbologna' if forge == 'github' else 'registry.gitlab.com/mbologna' -%}
-{%- set image = registry ~ '/' ~ project_name ~ ':' ~ ('latest' if ships_releases or changelog_releases else 'sha-<commit>') -%}
+{%- set image = registry ~ '/' ~ project_name ~ ':latest' -%}
 # {{ project_name }}
 
 {{ description }}
@@ -38,31 +38,39 @@ The image has no entry point: name one of the console scripts in
 The image runs as uid {{ image_uid }} and works with a read-only root filesystem;
 mount a writable `/tmp`{% if writable_dirs.split() %} and {% for d in writable_dirs.split() %}`{{ d }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}.
 
-## Versions
+## Versioning
 
 {% if ships_releases -%}
-Releases are the git tags `vX.Y.Z`. A weekly CI run (Monday 06:00 UTC)
-tags the next version when a `feat`, `fix`, `perf`, `revert` or breaking
-commit landed, or a maintenance patch when dependency updates are waiting;
-a CVE fix releases on the push that brings it. Only a tag builds and pushes
-the image, as `X.Y.Z`, `X.Y` and `latest`, with the version in its
+Releases follow SemVer: [auto-release](https://github.com/mbologna/auto-release)
+tags `vX.Y.Z` from the Conventional Commit types (`feat` minor; `fix`,
+`perf`, `revert` patch; a breaking change major). A weekly CI run (Monday
+06:00 UTC) tags the next version when such a commit landed, or a
+maintenance patch when dependency updates are waiting; a CVE fix releases
+on the push that brings it. Only a tag builds and pushes the image, as
+`X.Y.Z`, `X.Y` and `latest`, with the version in its
 `org.opencontainers.image.version` label. `version` in `pyproject.toml` is a
-placeholder and stays `0.0.0`.
+placeholder and stays `0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- elif changelog_releases -%}
 Every push to main that changes the image publishes it as `latest` and
 `sha-<commit>`{% if cloud_run != 'none' %} and deploys it, by digest, to the Cloud Run {{ cloud_run }}{% endif %}.
 The `sha-*` images are the rollback window.
 
 Releases are the git tags `vX.Y.Z` and their GitHub Releases, a changelog
-of what main already {% if cloud_run != 'none' %}deployed{% else %}published{% endif %}. A weekly CI run (Monday 06:00 UTC) tags
-the next version when a `feat`, `fix`, `perf`, `revert` or breaking commit
-landed, or a maintenance patch when dependency updates are waiting; a CVE
-fix releases on the push that brings it. A tag builds no image. `version`
-in `pyproject.toml` is a placeholder and stays `0.0.0`.
+of what main already {% if cloud_run != 'none' %}deployed{% else %}published{% endif %}. They follow SemVer:
+[auto-release](https://github.com/mbologna/auto-release) tags them from the
+Conventional Commit types (`feat` minor; `fix`, `perf`, `revert` patch; a
+breaking change major). A weekly CI run (Monday 06:00 UTC) tags the next
+version when such a commit landed, or a maintenance patch when dependency
+updates are waiting; a CVE fix releases on the push that brings it. A tag
+builds no image. `version` in `pyproject.toml` is a placeholder and stays
+`0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- else -%}
-There are no releases. Every push to main that changes the image publishes
-it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
-`version` in `pyproject.toml` is a placeholder and stays `0.0.0`.
+Unversioned: there are no releases or tags. Every push to main that changes
+the image publishes it as `latest` and `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
+`version` in `pyproject.toml` is a placeholder and stays `0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- endif %}
 
 ## Development

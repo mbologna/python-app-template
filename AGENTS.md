@@ -50,3 +50,19 @@ with any question you add or change.
   splits lines, and the only check is rendering and diffing.
 - A new question gets a row in the README's question tables and, when it
   changes the image or CI, a matrix entry in `.github/workflows/ci.yml`.
+
+## Versioning
+
+Plain SemVer: `vX.Y.Z` tags, each a GitHub Release and the version
+Renovate's copier manager offers generated projects (nothing builds on a
+tag), per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+
+- Never create, move or delete tags, and never edit a version number to cut
+  a release: auto-release tags from the commit types (`feat` minor; `fix`,
+  `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major).
+- Write Conventional Commit subjects; they decide the next version. "Rules
+  for changes" says which type a change to rendered output takes.
+- A generated project's `README.md` and `AGENTS.md` carry a Versioning
+  section for its release mode; keep them in step with `copier.yml` and the
+  CI templates.

@@ -29,7 +29,6 @@
   ships in the weekly maintenance release). CI lints every commit with
   [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
-- Releases are tags; `pyproject.toml`'s version stays `0.0.0`.
 {%- elif changelog_releases -%}
 - Conventional Commits, header at most 72 characters. The commit subjects
   that reach main are the changelog: `feat`/`fix`/`perf` release, `refactor`,
@@ -39,15 +38,12 @@
   and rejects `fixup!` commits; pull requests merge with a merge commit.
 - Every push to main that changes the image publishes it as `latest` and
   `sha-<commit>`{% if cloud_run != 'none' %} and deploys it, by digest, to the Cloud Run {{ cloud_run }}{% endif %}.
-  Release tags `vX.Y.Z` and their GitHub Releases are a changelog: they
-  build no image. `pyproject.toml`'s version stays `0.0.0`.
 {%- else -%}
 - Conventional Commits, header at most 72 characters. CI lints every commit
   with [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
-- No releases or version tags: every push to main that changes the image
-  publishes it as `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
-  `pyproject.toml`'s version stays `0.0.0`.
+- Every push to main that changes the image publishes it as `latest` and
+  `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
 {%- endif %}
 - Coverage may not drop below `fail_under` in `pyproject.toml`; raise it
   when tests are added.
@@ -64,6 +60,38 @@
 - One program in the image is its `ENTRYPOINT`, and flags go in the
   container's arguments. With several programs the image has a default
   `CMD`, or none, and a deployment's command picks one.
+
+## Versioning
+
+{% if ships_releases -%}
+Plain SemVer: `vX.Y.Z` tags, each building and pushing the image as
+`X.Y.Z`, `X.Y` and `latest`, per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+
+- Never create, move or delete tags, and never edit a version number to cut
+  a release: auto-release tags from the commit types (`feat` minor; `fix`,
+  `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major).
+- Write Conventional Commit subjects; they decide the next version.
+- `version` in `pyproject.toml` is a placeholder and stays `0.0.0`; the
+  image's `org.opencontainers.image.version` label comes from the tag.
+{%- elif changelog_releases -%}
+Plain SemVer, per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md):
+`vX.Y.Z` tags with a GitHub Release each, a changelog of what main already
+{% if cloud_run != 'none' %}deployed{% else %}published{% endif %}. A tag builds no image.
+
+- Never create, move or delete tags, and never edit a version number to cut
+  a release: auto-release tags from the commit types (`feat` minor; `fix`,
+  `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major).
+- Write Conventional Commit subjects; they decide the next version.
+- `version` in `pyproject.toml` is a placeholder and stays `0.0.0`.
+{%- else -%}
+Unversioned: no tags and no releases, per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+
+- Don't create tags or Releases; nothing would build from them.
+- `version` in `pyproject.toml` is a placeholder and stays `0.0.0`.
+{%- endif %}
 
 ## Template
 
