@@ -48,6 +48,9 @@ with any question you add or change.
   hosts or the services they run.
 - Watch Jinja whitespace: a `{%-` or `-%}` in the wrong place joins or
   splits lines, and the only check is rendering and diffing.
+- A question that forwards a ci-templates input renders the input only
+  for a non-default answer (`changed_images_only: false`), so the default
+  leaves `.gitlab-ci.yml` byte-identical.
 - The `.gitlab-ci.yml` components share one ci-templates version. Before
   bumping it, diff the component specs (`templates/*.yml`) between the two
   tags for renamed or removed inputs and adapt the template.
