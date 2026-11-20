@@ -249,9 +249,10 @@ copier manager offers generated projects. See the
 
 ## Development
 
-CI renders the template in six answer combinations covering both forges,
+CI renders the template in seven answer combinations covering both forges,
 the three release modes, both base images, the three entry-point styles,
-every licence kind and the image questions. Each result runs ruff, its tests with the coverage gate,
+every licence kind, the image questions and both `changed_images_only`
+settings. Each result runs ruff, its tests with the coverage gate,
 pre-commit, hadolint, an image build, a smoke test on a read-only root
 filesystem and checks of the image's user, exposed port and the absence of
 pip, uv and git. A second job copies a project from the latest release,
