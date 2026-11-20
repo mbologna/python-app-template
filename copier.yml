@@ -297,7 +297,7 @@ _message_after_copy: |
   {%- if forge == 'gitlab' or releases %}
   Release by merging Conventional Commits: the weekly auto-release run tags
   vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
-  placeholder (README.md, "Versions").
+  placeholder (README.md, "Versioning").
   {%- elif changelog_releases %}
   Every push to main publishes the image as latest and sha-<commit>{% if cloud_run != 'none' %} and deploys
   it to Cloud Run{% endif %}. The weekly auto-release run tags vX.Y.Z with a
