@@ -9,8 +9,13 @@
 #   release for dependency updates (needs the AUTO_RELEASE_TOKEN variable);
 {%- set subdirs = extra_images.split() %}
 {%- if subdirs %}
+{%- if changed_images_only %}
 # - a vX.Y.Z tag, for each image that changed: build, policy check, smoke
 #   test, Trivy report, push X.Y.Z, X.Y and latest, sign.
+{%- else %}
+# - a vX.Y.Z tag, for every image: build, policy check, smoke test, Trivy
+#   report, push X.Y.Z, X.Y and latest, sign.
+{%- endif %}
 {%- elif smoke_cmd == 'auto' %}
 # - a vX.Y.Z tag: build, policy check, smoke test (smoke_cmd auto imports
 #   every installed package), Trivy report, push X.Y.Z, X.Y and latest, sign.
@@ -19,8 +24,8 @@
 #   report, push X.Y.Z, X.Y and latest, sign.
 {%- endif %}
 include:
-  - component: gitlab.com/mbologna/ci-templates/base@7.3.0
-  - component: gitlab.com/mbologna/ci-templates/container-app@7.3.0
+  - component: gitlab.com/mbologna/ci-templates/base@8.2.0
+  - component: gitlab.com/mbologna/ci-templates/container-app@8.2.0
     inputs:
       strategy: conventional
 {%- if smoke_cmd != 'auto' %}
@@ -29,10 +34,20 @@ include:
 {%- if subdirs %}
       # The security strategy compares every image's base image.
       dockerfiles: Dockerfile{% for d in subdirs %} {{ d }}/Dockerfile{% endfor %}
+{%- if changed_images_only %}
       # One release and check job per image. Each image's IMAGE_SKIP_PATHS
       # adds the files that don't go into it to skip_paths; a release
       # rebuilds only the images whose files changed. hadolint in CI lints
       # the first Dockerfile only; pre-commit lints them all.
+{%- else %}
+      # One release and check job per image. Each image's IMAGE_SKIP_PATHS
+      # adds the files that don't go into it to skip_paths for the merge
+      # request check. hadolint in CI lints the first Dockerfile only;
+      # pre-commit lints them all.
+      # Every release rebuilds every image, so each one picks up the
+      # distribution's security updates applied at build time.
+      changed_images_only: false
+{%- endif %}
       images:
         - IMAGE_DOCKERFILE: Dockerfile
           IMAGE_SKIP_PATHS: "{% for d in subdirs %}{{ d }}/*{{ ' ' if not loop.last else '' }}{% endfor %}"
@@ -45,7 +60,7 @@ include:
           IMAGE_SKIP_PATHS: "src/* Dockerfile pyproject.toml uv.lock requirements-uv.txt{% for o in subdirs if o != d %} {{ o }}/*{% endfor %}"
 {%- endfor %}
 {%- endif %}
-  - component: gitlab.com/mbologna/ci-templates/python-test@7.3.0
+  - component: gitlab.com/mbologna/ci-templates/python-test@8.2.0
 
 test:
   # The Python the image ships: the Dockerfile's final stage, which the

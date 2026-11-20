@@ -77,7 +77,8 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 | `cloud_run` | `none` | GitHub, with `releases: false`: `service` or `job` deploys each image published from main to Cloud Run (docker-ci's `deploy_type`) |
 | `codecov` | no | GitHub: uploads the coverage report to Codecov |
 | `smoke_cmd` | GitHub: `<project_name> --help`; GitLab: `auto` | GitHub: a shell command docker-ci runs in the image (entry point overridden, no network) that must exit 0. GitLab: container-app's `smoke_cmd`, which is `auto` (import every installed package), `none`, or the arguments to run the image with |
-| `extra_images` | empty | GitLab: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input, and a release rebuilds only the images whose files changed |
+| `extra_images` | empty | GitLab: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input. See [Several images](#several-images) |
+| `changed_images_only` | yes | GitLab, with `extra_images`: container-app's `changed_images_only`. Yes: a release rebuilds only the images whose files changed. No: every release rebuilds every image. See [Several images](#several-images) |
 | `owned_files` | none | Files the project owns; see [Owning a file](#owning-a-file) |
 
 Docker Hub pushes are off in every generated project.
@@ -109,6 +110,30 @@ and both questions are skipped.
 
 When every push publishes, the `sha-*` images are the rollback window, and
 a Cloud Run deploy points the service or job at the pushed image's digest.
+
+## Several images
+
+On GitLab, `extra_images` adds an image for each subdirectory, and
+`changed_images_only` decides what a release rebuilds.
+
+With `changed_images_only: true`, the default, a release rebuilds only the
+images whose files changed since the previous release; the others get the
+new version's tags on their previous digest, with no build. That saves CI
+minutes and registry space. The cost is security updates. The runtime stage
+applies the distribution's updates at build time, and auto-release cuts a
+fresh-rebuild release (a patch release when the last image has fixable
+findings in the packages its Dockerfile installs) only for a project with
+one Dockerfile. With several, nothing ever rebuilds an image whose files
+don't change, so it keeps the packages of its last build.
+
+With `changed_images_only: false`, every release rebuilds every image, and
+each one picks up the current security updates. Releases take longer and
+store a new copy of the layers that changed upstream. Choose it when an
+extra image installs distribution packages and its own files rarely
+change.
+
+The default renders no input, so a project that answers nothing gets the
+`.gitlab-ci.yml` it had before the question existed.
 
 ## Entry points
 
@@ -224,9 +249,10 @@ copier manager offers generated projects. See the
 
 ## Development
 
-CI renders the template in six answer combinations covering both forges,
+CI renders the template in seven answer combinations covering both forges,
 the three release modes, both base images, the three entry-point styles,
-every licence kind and the image questions. Each result runs ruff, its tests with the coverage gate,
+every licence kind, the image questions and both `changed_images_only`
+settings. Each result runs ruff, its tests with the coverage gate,
 pre-commit, hadolint, an image build, a smoke test on a read-only root
 filesystem and checks of the image's user, exposed port and the absence of
 pip, uv and git. A second job copies a project from the latest release,

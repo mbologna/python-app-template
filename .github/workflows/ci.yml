@@ -97,6 +97,15 @@ jobs:
             run: --help
             user: "1000:1000"
             port: ""
+          - name: GitLab, two extra images, every release rebuilds every image
+            answers: |
+              forge: gitlab
+              extra_images: worker fetcher
+              changed_images_only: false
+              smoke_cmd: none
+            run: --help
+            user: "1000:1000"
+            port: ""
     env:
       # Inside the workspace, so the hadolint action's container sees it.
       OUT: ${{ github.workspace }}/rendered

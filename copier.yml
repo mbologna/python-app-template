@@ -257,6 +257,15 @@ extra_images:
   validator: >-
     {% for d in extra_images.split() %}{% if not (d | regex_search('^[a-z0-9][a-z0-9._-]*$')) %}Not a subdirectory name: {{ d }}. {% endif %}{% endfor %}
 
+changed_images_only:
+  type: bool
+  help: >-
+    GitLab: a release rebuilds only the images whose files changed (cheaper,
+    but an unchanged image misses the distribution's security updates); no
+    rebuilds every image on every release
+  default: true
+  when: "{{ forge == 'gitlab' and extra_images.strip() != '' }}"
+
 owned_files:
   type: str
   help: >-
