@@ -203,19 +203,24 @@ changed: `license: none` removes `LICENSE`. With `license: other` the
 template still renders a placeholder `LICENSE`, which never overwrites the
 project's own.
 
-## Versions
+## Versioning
 
 A generated project keeps `version = "0.0.0"` in `pyproject.toml`. With
-image releases, its releases are git tags `vX.Y.Z` that auto-release
-creates on the weekly schedule; only a tag builds and pushes the image, and
-the pipeline sets the image's `org.opencontainers.image.version` label from
-that tag. In the changelog mode the tags are release notes only, and each
-push to main publishes `latest` and `sha-<commit>`, as it does with no
-releases at all. Nothing needs the version inside the package, so nothing
-has to be bumped.
+image releases, its releases are SemVer git tags `vX.Y.Z` that
+[auto-release](https://github.com/mbologna/auto-release) creates on the
+weekly schedule from the Conventional Commit types (`feat` minor; `fix`,
+`perf`, `revert` patch; a breaking change major); only a tag builds and
+pushes the image, as `X.Y.Z`, `X.Y` and `latest`, and the pipeline sets the
+image's `org.opencontainers.image.version` label from that tag. In the
+changelog mode the tags are release notes only, and each push to main
+publishes `latest` and `sha-<commit>`, as it does with no releases at all.
+Nothing needs the version inside the package, so nothing has to be bumped.
 
-This template is versioned the same way: Monday's CI run tags it when a
-`feat`, `fix`, `perf`, `revert` or breaking commit landed.
+This template is versioned the same way: Monday's CI run tags `vX.Y.Z`
+with a GitHub Release when a `feat`, `fix`, `perf`, `revert` or breaking
+commit landed. Nothing builds on a tag; the tag is the version Renovate's
+copier manager offers generated projects. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 
 ## Development
 
