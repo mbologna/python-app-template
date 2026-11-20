@@ -19,8 +19,8 @@
 #   report, push X.Y.Z, X.Y and latest, sign.
 {%- endif %}
 include:
-  - component: gitlab.com/mbologna/ci-templates/base@7.3.0
-  - component: gitlab.com/mbologna/ci-templates/container-app@7.3.0
+  - component: gitlab.com/mbologna/ci-templates/base@8.2.0
+  - component: gitlab.com/mbologna/ci-templates/container-app@8.2.0
     inputs:
       strategy: conventional
 {%- if smoke_cmd != 'auto' %}
@@ -45,7 +45,7 @@ include:
           IMAGE_SKIP_PATHS: "src/* Dockerfile pyproject.toml uv.lock requirements-uv.txt{% for o in subdirs if o != d %} {{ o }}/*{% endfor %}"
 {%- endfor %}
 {%- endif %}
-  - component: gitlab.com/mbologna/ci-templates/python-test@7.3.0
+  - component: gitlab.com/mbologna/ci-templates/python-test@8.2.0
 
 test:
   # The Python the image ships: the Dockerfile's final stage, which the

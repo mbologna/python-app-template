@@ -48,6 +48,9 @@ with any question you add or change.
   hosts or the services they run.
 - Watch Jinja whitespace: a `{%-` or `-%}` in the wrong place joins or
   splits lines, and the only check is rendering and diffing.
+- The `.gitlab-ci.yml` components share one ci-templates version. Before
+  bumping it, diff the component specs (`templates/*.yml`) between the two
+  tags for renamed or removed inputs and adapt the template.
 - A new question gets a row in the README's question tables and, when it
   changes the image or CI, a matrix entry in `.github/workflows/ci.yml`.
 
