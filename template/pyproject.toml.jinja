@@ -1,6 +1,17 @@
 [project]
 name = "{{ project_name }}"
-{%- if forge == 'gitlab' or releases %}
+{%- if kind == 'package' and pypi_publish %}
+# A placeholder, never bumped: a release is the git tag vX.Y.Z that
+# auto-release creates, and publish.yml builds the tag with its version for
+# PyPI. Nothing reads this field at run time.
+{%- elif kind == 'package' and changelog_releases %}
+# A placeholder, never bumped: a release is the git tag vX.Y.Z that
+# auto-release creates, with a {{ 'GitHub' if forge == 'github' else 'GitLab' }} Release of the commit subjects; it
+# builds nothing. Nothing reads this field at run time.
+{%- elif kind == 'package' %}
+# A placeholder, never bumped: this project has no releases. Nothing reads
+# this field at run time.
+{%- elif forge == 'gitlab' or releases %}
 # A placeholder, never bumped: a release is the git tag vX.Y.Z that
 # auto-release creates, and the image built from that tag carries the
 # version in its org.opencontainers.image.version label. Nothing reads this
@@ -25,21 +36,29 @@ license-files = ["LICENSE", "LICENSES/*"]
 license = "{{ license }}"
 {%- endif %}
 authors = [{ name = "{{ author }}" }]
+{%- if kind == 'package' %}
+# The oldest Python the package supports. CI tests on 3.15 only; ruff's
+# target-version below keeps syntax and pyupgrade fixes within this floor.
+requires-python = ">={{ python_floor }}"
+{%- else %}
 # The Python the Dockerfile's base image ships; Renovate moves the image,
 # a person moves this floor with the next minor.
 requires-python = ">=3.15"
+{%- endif %}
 dependencies = [
 {%- if notifications %}
     "apprise-notify>=1.2.0",
 {%- endif %}
 ]
+{%- if kind == 'app' or script_target %}
 
 [project.scripts]
-{%- if entrypoint == 'none' %}
+{%- if kind == 'app' and entrypoint == 'none' %}
 # Several programs and no default: each deployment runs one of these.
 {%- endif %}
-{%- if entrypoint != 'none' or sample_code %}
+{%- if kind == 'package' or entrypoint != 'none' or sample_code %}
 {{ project_name }} = "{{ script_target }}"
+{%- endif %}
 {%- endif %}
 
 [build-system]
@@ -68,7 +87,7 @@ exclude-newer-package = { apprise-notify = false }
 
 [tool.ruff]
 line-length = 120
-target-version = "py315"
+target-version = "{% if kind == 'package' %}py{{ python_floor | replace('.', '') }}{% else %}py315{% endif %}"
 
 [tool.ruff.lint]
 select = [

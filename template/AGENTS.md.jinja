@@ -1,11 +1,17 @@
-{%- set ships_releases = forge == 'gitlab' or releases -%}
+{%- set package = kind == 'package' -%}
+{%- set ships_releases = not package and (forge == 'gitlab' or releases) -%}
 # AGENTS.md: {{ project_name }}
 
 {{ description }}. User-facing docs: `README.md`.
 
 ## Layout
 
-{% if entrypoint == 'entrypoint' -%}
+{% if package and script_target -%}
+- `src/{{ package_name }}/`: the package; `{{ script_target }}` is the console
+  script `{{ project_name }}`.
+{%- elif package -%}
+- `src/{{ package_name }}/`: the package, with no console script.
+{%- elif entrypoint == 'entrypoint' -%}
 - `src/{{ package_name }}/`: the package; `{{ script_target }}` is the console
   script `{{ project_name }}`, the image's entry point.
 {%- elif entrypoint == 'cmd' -%}
@@ -17,12 +23,14 @@
   deployment's command names a console script from `[project.scripts]`.
 {%- endif %}
 - `tests/`: pytest. Keep I/O out of the logic so it tests without mocks.
+{%- if not package %}
 - `Dockerfile`: two stages, `uv sync --locked` into `/opt/venv`, then a
   runtime without pip.
+{%- endif %}
 
 ## Conventions
 
-{% if ships_releases -%}
+{% if ships_releases or pypi_publish -%}
 - Conventional Commits, header at most 72 characters. The commit subjects
   that reach main are the release notes: `feat`/`fix`/`perf` release, `refactor`,
   `test`, `docs`, `ci`, `chore` don't (a dependency update to runtime files
@@ -36,30 +44,43 @@
   goes into the weekly maintenance release). CI lints every commit with
   [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
+{%- if not package %}
 - Every push to main that changes the image publishes it as `latest` and
   `sha-<commit>`{% if cloud_run != 'none' %} and deploys it, by digest, to the Cloud Run {{ cloud_run }}{% endif %}.
+{%- endif %}
 {%- else -%}
 - Conventional Commits, header at most 72 characters. CI lints every commit
   with [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
+{%- if not package %}
 - Every push to main that changes the image publishes it as `latest` and
   `sha-<commit>`{% if cloud_run != 'none' %} and deploys it to the Cloud Run {{ cloud_run }}{% endif %}.
 {%- endif %}
+{%- endif %}
 - Coverage may not drop below `fail_under` in `pyproject.toml`; raise it
   when tests are added.
-- Dependencies: `uv add <pkg>`; uv.lock is committed and the image installs
-  it with `--locked`. `exclude-newer` keeps releases younger than 7 days out.
+- Dependencies: `uv add <pkg>`; uv.lock is committed and {% if package %}CI installs it
+  with{% else %}the image installs
+  it with{% endif %} `--locked`. `exclude-newer` keeps releases younger than 7 days out.
 {%- if notifications %}
 - Notifications go through `apprise_notify.notify()` with the `APPRISE_URL`
   environment variable: one URL or several space-separated ones, tried in
   order. It never raises; check its return value when sending matters.
 {%- endif %}
+{%- if package %}
+- `requires-python` is `>={{ python_floor }}`, and ruff's `target-version` matches it.
+{%- if python_floor != '3.15' %}
+  CI tests on Python 3.15 only: keep syntax and standard library features
+  newer than {{ python_floor }} out of the code.
+{%- endif %}
+{%- else %}
 - The image: non-root (uid {{ image_uid }}), no pip, nothing written outside `/tmp`{% if writable_dirs.split() %},
   {% for d in writable_dirs.split() %}`{{ d }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
   or a mounted volume.
 - One program in the image is its `ENTRYPOINT`, and flags go in the
   container's arguments. With several programs the image has a default
   `CMD`, or none, and a deployment's command picks one.
+{%- endif %}
 
 ## Versioning
 
@@ -74,6 +95,31 @@ Plain SemVer: `vX.Y.Z` tags, each building and pushing the image as
 - Write Conventional Commit subjects; they decide the next version.
 - `version` in `pyproject.toml` is a placeholder and stays `0.0.0`; the
   image's `org.opencontainers.image.version` label comes from the tag.
+{%- elif package and pypi_publish -%}
+Plain SemVer: `vX.Y.Z` tags with a GitHub Release each, which
+`publish.yml` builds and publishes to PyPI with the tag's version, per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+
+- Never create, move or delete tags, and never edit a version number to cut
+  a release: auto-release tags from the commit types (`feat` minor; `fix`,
+  `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major).
+- Write Conventional Commit subjects; they decide the next version.
+- `version` in `pyproject.toml` is a placeholder and stays `0.0.0`; the
+  build sets the tag's version. A published version can't be replaced on
+  PyPI, so a broken release is fixed by the next one.
+- `publish.yml` keeps its name: PyPI's trusted publisher names this
+  repository, that workflow file and the `pypi` environment.
+{%- elif package and changelog_releases -%}
+Plain SemVer, per the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md):
+`vX.Y.Z` tags with a {{ 'GitHub' if forge == 'github' else 'GitLab' }} Release each, a changelog of the commit
+subjects. A tag builds nothing.
+
+- Never create, move or delete tags, and never edit a version number to cut
+  a release: auto-release tags from the commit types (`feat` minor; `fix`,
+  `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major).
+- Write Conventional Commit subjects; they decide the next version.
+- `version` in `pyproject.toml` is a placeholder and stays `0.0.0`.
 {%- elif changelog_releases -%}
 Plain SemVer, per the
 [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md):
