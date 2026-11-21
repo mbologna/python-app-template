@@ -1,4 +1,6 @@
-{%- set ships_releases = forge == 'gitlab' or releases -%}
+{%- set package = kind == 'package' -%}
+{%- set ships_releases = not package and (forge == 'gitlab' or releases) -%}
+{%- set forge_name = 'GitHub' if forge == 'github' else 'GitLab' -%}
 {%- set registry = 'ghcr.io/mbologna' if forge == 'github' else 'registry.gitlab.com/mbologna' -%}
 {%- set image = registry ~ '/' ~ project_name ~ ':latest' -%}
 # {{ project_name }}
@@ -18,6 +20,23 @@
 {%- endif %}
 
 {% endif -%}
+{% if package and script_target -%}
+## Running
+
+```sh
+{% if pypi_publish -%}
+uvx {{ project_name }} --help
+{%- else -%}
+uv run {{ project_name }} --help
+{%- endif %}
+```
+{%- elif package -%}
+## Usage
+
+```python
+import {{ package_name }}
+```
+{%- else -%}
 ## Running
 
 ```sh
@@ -37,6 +56,7 @@ The image has no entry point: name one of the console scripts in
 `pyproject.toml`'s `[project.scripts]`. {% endif -%}
 The image runs as uid {{ image_uid }} and works with a read-only root filesystem;
 mount a writable `/tmp`{% if writable_dirs.split() %} and {% for d in writable_dirs.split() %}`{{ d }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}.
+{%- endif %}
 
 ## Versioning
 
@@ -50,6 +70,33 @@ on the push that brings it. Only a tag builds and pushes the image, as
 `X.Y.Z`, `X.Y` and `latest`, with the version in its
 `org.opencontainers.image.version` label. `version` in `pyproject.toml` is a
 placeholder and stays `0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+{%- elif package and pypi_publish -%}
+Releases follow SemVer: [auto-release](https://github.com/mbologna/auto-release)
+tags `vX.Y.Z` from the Conventional Commit types (`feat` minor; `fix`,
+`perf`, `revert` patch; a breaking change major). A weekly CI run (Monday
+06:00 UTC) tags the next version when such a commit landed, or a
+maintenance patch when dependency updates are waiting; a `fix(security)`
+commit releases on the push that brings it. Each tag gets a GitHub Release
+of the commit subjects, and `publish.yml` builds the tag with its version
+and publishes it to [PyPI](https://pypi.org/project/{{ project_name }}/) with
+trusted publishing. `version` in `pyproject.toml` is a placeholder and
+stays `0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+{%- elif package and changelog_releases -%}
+Releases are the git tags `vX.Y.Z` and their {{ forge_name }} Releases, a changelog
+of the commit subjects. They follow SemVer:
+[auto-release](https://github.com/mbologna/auto-release) tags them from the
+Conventional Commit types (`feat` minor; `fix`, `perf`, `revert` patch; a
+breaking change major). A weekly CI run (Monday 06:00 UTC) tags the next
+version when such a commit landed, or a maintenance patch when dependency
+updates are waiting; a `fix(security)` commit releases on the push that
+brings it. A tag builds nothing. `version` in `pyproject.toml` is a
+placeholder and stays `0.0.0`. See the
+[versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
+{%- elif package -%}
+Unversioned: there are no releases or tags. `version` in `pyproject.toml`
+is a placeholder and stays `0.0.0`. See the
 [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 {%- elif changelog_releases -%}
 Every push to main that changes the image publishes it as `latest` and
@@ -79,16 +126,26 @@ the image publishes it as `latest` and `sha-<commit>`{% if cloud_run != 'none' %
 uv run pytest                     # with the coverage gate from pyproject.toml
 uv run ruff check . && uv run ruff format --check .
 pre-commit install                # the same checks before each commit
+{%- if not package %}
 docker build -t {{ project_name }} .
+{%- endif %}
 ```
 
 Dependencies resolve only to releases at least 7 days old (`exclude-newer`
-in `pyproject.toml`), and the image installs exactly what `uv.lock` pins.
+in `pyproject.toml`), and {% if package %}CI{% else %}the image{% endif %} installs exactly what `uv.lock` pins.
 To take a CVE fix released less than 7 days ago, add the package to
 `exclude-newer-package` as `<name> = false`, run `uv lock`, and remove the
 entry once the release is a week old.
+{%- if package and python_floor != '3.15' %}
 
-The skeleton (Dockerfile, CI, lint and test configuration) comes from
+The package supports Python {{ python_floor }} and newer (`requires-python` in
+`pyproject.toml`). CI tests on Python 3.15 only, so keep syntax and
+standard library features newer than {{ python_floor }} out of the code. Create the
+virtual environment with that Python too (`uv venv --python 3.15`): uv may
+otherwise pick an older one, on which some pre-commit hooks don't install.
+{%- endif %}
+
+The skeleton ({% if not package %}Dockerfile, {% endif %}CI, lint and test configuration) comes from
 [python-app-template](https://github.com/mbologna/python-app-template);
 Renovate proposes its updates as pull requests.
 {%- if license != 'none' %}

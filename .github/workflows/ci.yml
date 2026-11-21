@@ -2,9 +2,10 @@ name: CI
 
 # Renders the template in several answer combinations and checks that each
 # result passes its own checks: ruff, the tests with the coverage gate,
-# pre-commit, hadolint, the image build and a smoke test of the image. A
-# second job updates a project rendered from the latest release to this
-# commit and checks that the update equals a fresh copy. Monday's schedule
+# pre-commit, actionlint on GitHub, and for an app hadolint, the image build
+# and a smoke test of the image. A second job updates a project rendered
+# from the latest release to this commit and checks that the update equals
+# a fresh copy. Monday's schedule
 # releases the template (auto-release, conventional), and each vX.Y.Z tag
 # is what Renovate's copier manager offers the generated repositories.
 
@@ -25,6 +26,7 @@ permissions:
 
 env:
   COPIER: copier==9.19.1
+  ACTIONLINT: actionlint-py==1.7.12.25
 
 jobs:
   render:
@@ -106,6 +108,26 @@ jobs:
             run: --help
             user: "1000:1000"
             port: ""
+          - name: GitHub, package, no releases
+            answers: |
+              kind: package
+            package: true
+          - name: GitHub, package library on PyPI, Python 3.10 floor
+            answers: |
+              kind: package
+              python_floor: "3.10"
+              changelog_releases: true
+              pypi_publish: true
+              script_target: ""
+              notifications: false
+            package: true
+          - name: GitLab, package, changelog releases, Python 3.12 floor
+            answers: |
+              kind: package
+              forge: gitlab
+              changelog_releases: true
+              python_floor: "3.12"
+            package: true
     env:
       # Inside the workspace, so the hadolint action's container sees it.
       OUT: ${{ github.workspace }}/rendered
@@ -133,6 +155,26 @@ jobs:
           fi
           find "$OUT" -type f -not -path '*/.venv/*' | sort
 
+      # A package renders no image files, keeps requirements-uv.txt only for
+      # GitLab's python-test, and gets publish.yml only with pypi_publish.
+      # Its README.md and AGENTS.md describe no image.
+      - name: Check the package's files
+        if: matrix.package
+        working-directory: ${{ env.OUT }}
+        run: |
+          test ! -e Dockerfile && test ! -e .dockerignore
+          if grep -q '^forge: gitlab$' .copier-answers.yml; then
+            test -f requirements-uv.txt
+          else
+            test ! -e requirements-uv.txt
+          fi
+          if grep -q '^pypi_publish: true$' .copier-answers.yml; then
+            test -f .github/workflows/publish.yml
+          else
+            test ! -e .github/workflows/publish.yml
+          fi
+          ! grep -inE 'image|dockerfile|uid' README.md AGENTS.md
+
       - name: Lint and test
         working-directory: ${{ env.OUT }}
         run: |
@@ -151,12 +193,24 @@ jobs:
           git init -q && git add -A
           uv run pre-commit run --all-files --show-diff-on-failure
 
+      # actionlint's bundled runner list predates ubuntu-26.04, which the
+      # rendered workflows and the shared ones they call run on. shellcheck,
+      # on the runner, checks the run: scripts.
+      - name: actionlint
+        if: hashFiles('rendered/.github/workflows/*.yml') != ''
+        working-directory: ${{ env.OUT }}
+        run: |
+          printf 'self-hosted-runner:\n  labels:\n    - ubuntu-26.04\n' > "$RUNNER_TEMP/actionlint.yaml"
+          uvx --from "$ACTIONLINT" actionlint -config-file "$RUNNER_TEMP/actionlint.yaml"
+
       - name: hadolint
+        if: ${{ !matrix.package }}
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: rendered/Dockerfile
 
       - name: Build and smoke-test the image
+        if: ${{ !matrix.package }}
         working-directory: ${{ env.OUT }}
         env:
           RUN_ARGS: ${{ matrix.run }}

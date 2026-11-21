@@ -1,7 +1,8 @@
 # Copier template for a small Python application shipped as a container
 # image: src/ layout, uv, ruff, pytest with a coverage gate, a hardened
-# two-stage Dockerfile, and CI on GitHub or GitLab. See README.md, which
-# describes every question below.
+# two-stage Dockerfile, and CI on GitHub or GitLab. kind: package renders
+# the same project without the image. See README.md, which describes every
+# question below.
 #
 # Every question added after v1.1.3 defaults to the output v1.1.3 gave, so a
 # `copier update` of an existing project changes nothing it didn't ask for.
@@ -33,6 +34,26 @@ package_name:
 description:
   type: str
   help: One-line description (pyproject, README, image label)
+
+kind:
+  type: str
+  help: What the project ships, which decides whether it has an image
+  choices:
+    An application in a container image (Dockerfile, image build in CI): app
+    A Python package with no image (a library, a tool, a generator CI runs): package
+  default: app
+
+python_floor:
+  type: str
+  help: >-
+    Oldest Python the package supports, as 3.N: requires-python and ruff's
+    target-version (CI tests on 3.15)
+  default: "3.15"
+  when: "{{ kind == 'package' }}"
+  validator: >-
+    {% if not (python_floor | regex_search('^3\\.[0-9]+$')) or (python_floor.split('.')[1] | int) < 10 or (python_floor.split('.')[1] | int) > 15 %}
+    Use a version from 3.10 to 3.15, e.g. 3.10.
+    {% endif %}
 
 author:
   type: str
@@ -92,6 +113,7 @@ coverage_fail_under:
   default: 80
 
 # --- The image --------------------------------------------------------------
+# Every question here has `when: kind == 'app'`; a package skips them.
 
 base_variant:
   type: str
@@ -100,6 +122,7 @@ base_variant:
     python:<version>-slim (Debian): slim
     python:<version>-alpine (musl): alpine
   default: slim
+  when: "{{ kind == 'app' }}"
 
 entrypoint:
   type: str
@@ -111,16 +134,18 @@ entrypoint:
     CMD, several programs with a default one (a deployment's command replaces it): cmd
     None, several programs and no default (each deployment sets its command): none
   default: entrypoint
+  when: "{{ kind == 'app' }}"
 
 script_target:
   type: str
   help: >-
     The function behind the {{ project_name }} console script, as
-    module:function
+    module:function{% if kind == 'package' %}; empty for no console script (a
+    library){% endif %}
   default: "{{ package_name }}:main"
-  when: "{{ entrypoint != 'none' }}"
+  when: "{{ kind == 'package' or entrypoint != 'none' }}"
   validator: >-
-    {% if not (script_target | regex_search('^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*:[a-zA-Z_][a-zA-Z0-9_]*$')) %}
+    {% if (script_target or kind == 'app') and not (script_target | regex_search('^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*:[a-zA-Z_][a-zA-Z0-9_]*$')) %}
     Use module:function, e.g. {{ package_name }}.cli:main.
     {% endif %}
 
@@ -128,6 +153,7 @@ image_uid:
   type: int
   help: UID and GID the image runs as (USER uid:gid); never 0
   default: 1000
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% if image_uid < 1 or image_uid > 2147483647 %}Use a UID from 1 to 2147483647.{% endif %}
 
@@ -137,6 +163,7 @@ image_user:
     Name of an account to create for that UID, for software that needs a
     passwd entry; empty runs as the bare UID
   default: ""
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% if image_user and not (image_user | regex_search('^[a-z_][a-z0-9_-]*$')) %}
     Use a lowercase account name, or leave it empty.
@@ -148,6 +175,7 @@ runtime_packages:
     Distribution packages the app needs at run time, separated by spaces
     (apt on slim, apk on alpine)
   default: ""
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% for p in runtime_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
 
@@ -157,6 +185,7 @@ build_packages:
     Distribution packages only the build stage needs, e.g. a compiler for a
     dependency without a wheel, separated by spaces
   default: ""
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% for p in build_packages.split() %}{% if not (p | regex_search('^[A-Za-z0-9][A-Za-z0-9+._:=~-]*$')) %}Not a package name: {{ p }}. {% endif %}{% endfor %}
 
@@ -166,6 +195,7 @@ runtime_env:
     Extra environment for the image, as NAME=value pairs separated by spaces
     (an ENV line after the template's own)
   default: ""
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% for p in runtime_env.split() %}{% if not (p | regex_search('^[A-Za-z_][A-Za-z0-9_]*=\\S*$')) %}Not NAME=value: {{ p }}. {% endif %}{% endfor %}
 
@@ -175,6 +205,7 @@ writable_dirs:
     Directories the app writes to besides /tmp, separated by spaces: created
     and owned by the image's UID, so a new volume mounted there is writable
   default: ""
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% for p in writable_dirs.split() %}{% if not (p | regex_search('^/[A-Za-z0-9._/-]+$')) %}Not an absolute path: {{ p }}. {% endif %}{% endfor %}
 
@@ -184,6 +215,7 @@ port:
     A web service's port: sets PORT and EXPOSE (Cloud Run and most runtimes
     pass PORT); 0 for an app that serves nothing
   default: 0
+  when: "{{ kind == 'app' }}"
   validator: >-
     {% if port < 0 or port > 65535 %}Use a port from 1 to 65535, or 0.{% endif %}
 
@@ -195,22 +227,39 @@ port:
 # - not releases, changelog_releases: every push to main publishes, and
 #   auto-release still tags vX.Y.Z with a GitHub Release, as a changelog;
 # - neither: every push to main publishes, with no tags at all.
+# A package has no image, so releases is false (its default follows kind)
+# and changelog_releases alone decides, on both forges; pypi_publish makes
+# the tags publish to PyPI.
 releases:
   type: bool
   help: >-
     GitHub: release vX.Y.Z tags with auto-release and publish only those; no
     publishes every push to main (latest and sha-*)
-  default: true
-  when: "{{ forge == 'github' }}"
+  default: "{{ kind == 'app' }}"
+  when: "{{ forge == 'github' and kind == 'app' }}"
 
 changelog_releases:
   type: bool
   help: >-
+    {% if kind == 'package' -%}
+    Tag vX.Y.Z weekly with auto-release and publish a {{ 'GitHub' if forge == 'github' else 'GitLab' }} Release of
+    the commit subjects; no means no tags or releases at all
+    {%- else -%}
     GitHub, publishing every push: still tag vX.Y.Z weekly with auto-release
     and publish a GitHub Release of the commit subjects, as a changelog (the
     tags build nothing)
+    {%- endif %}
   default: false
-  when: "{{ forge == 'github' and not releases }}"
+  when: "{{ kind == 'package' or (forge == 'github' and not releases) }}"
+
+pypi_publish:
+  type: bool
+  help: >-
+    GitHub: publish each release tag to PyPI with trusted publishing
+    (.github/workflows/publish.yml and the pypi environment, which PyPI's
+    trusted publisher must name)
+  default: false
+  when: "{{ kind == 'package' and forge == 'github' and changelog_releases }}"
 
 cloud_run:
   type: str
@@ -220,7 +269,7 @@ cloud_run:
     Cloud Run service: service
     Cloud Run job: job
   default: none
-  when: "{{ forge == 'github' and not releases }}"
+  when: "{{ forge == 'github' and kind == 'app' and not releases }}"
 
 codecov:
   type: bool
@@ -246,6 +295,7 @@ smoke_cmd:
     {%- else -%}
     {{ project_name }} --help
     {%- endif %}
+  when: "{{ kind == 'app' }}"
 
 extra_images:
   type: str
@@ -253,7 +303,7 @@ extra_images:
     GitLab: subdirectories with a Dockerfile of their own, separated by
     spaces; each builds a second image, $CI_REGISTRY_IMAGE/<subdirectory>
   default: ""
-  when: "{{ forge == 'gitlab' }}"
+  when: "{{ forge == 'gitlab' and kind == 'app' }}"
   validator: >-
     {% for d in extra_images.split() %}{% if not (d | regex_search('^[a-z0-9][a-z0-9._-]*$')) %}Not a subdirectory name: {{ d }}. {% endif %}{% endfor %}
 
@@ -264,7 +314,7 @@ changed_images_only:
     but an unchanged image misses the distribution's security updates); no
     rebuilds every image on every release
   default: true
-  when: "{{ forge == 'gitlab' and extra_images.strip() != '' }}"
+  when: "{{ forge == 'gitlab' and kind == 'app' and extra_images.strip() != '' }}"
 
 owned_files:
   type: str
@@ -273,9 +323,13 @@ owned_files:
     update (for a Dockerfile or CI too bespoke for the questions above)
   multiselect: true
   choices:
-    Dockerfile: Dockerfile
+    Dockerfile:
+      value: Dockerfile
+      validator: "{% if kind == 'package' %}A package has no Dockerfile{% endif %}"
     The CI file (.github/workflows/ci.yml or .gitlab-ci.yml): ci
-    .dockerignore: .dockerignore
+    .dockerignore:
+      value: .dockerignore
+      validator: "{% if kind == 'package' %}A package has no .dockerignore{% endif %}"
     .gitignore: .gitignore
     .pre-commit-config.yaml: .pre-commit-config.yaml
   default: []
@@ -293,6 +347,15 @@ _skip_if_exists:
   - "{% if '.gitignore' in owned_files %}.gitignore{% endif %}"
   - "{% if '.pre-commit-config.yaml' in owned_files %}.pre-commit-config.yaml{% endif %}"
 
+# Files the answers leave out. An app renders all of them, so an empty
+# pattern matches nothing. A package has no image; on GitLab it keeps
+# requirements-uv.txt, from which ci-templates' python-test installs uv.
+_exclude:
+  - "{% if kind == 'package' %}/Dockerfile{% endif %}"
+  - "{% if kind == 'package' %}/.dockerignore{% endif %}"
+  - "{% if kind == 'package' and forge == 'github' %}/requirements-uv.txt{% endif %}"
+  - "{% if not pypi_publish %}/.github/workflows/publish.yml{% endif %}"
+
 # No _tasks: copier refuses a template with tasks unless --trust is given,
 # and Renovate's copier manager runs without it. uv.lock is generated by
 # `uv lock` after a copy (and after an update that changes dependencies).
@@ -303,7 +366,20 @@ _message_after_copy: |
     uv lock
     uv run pytest && uv run ruff check . && uv run ruff format --check .
     pre-commit install
-  {%- if forge == 'gitlab' or releases %}
+  {%- if kind == 'package' %}
+  {%- if pypi_publish %}
+  Release by merging Conventional Commits: the weekly auto-release run tags
+  vX.Y.Z with a GitHub Release, and publish.yml publishes the tag to PyPI.
+  First add a trusted publisher on PyPI naming this repository, publish.yml
+  and the pypi environment. pyproject.toml's version stays a placeholder.
+  {%- elif changelog_releases %}
+  Release by merging Conventional Commits: the weekly auto-release run tags
+  vX.Y.Z with a {{ 'GitHub' if forge == 'github' else 'GitLab' }} Release of the commit subjects. pyproject.toml's
+  version stays a placeholder.
+  {%- else %}
+  No releases: pyproject.toml's version stays a placeholder.
+  {%- endif %}
+  {%- elif forge == 'gitlab' or releases %}
   Release by merging Conventional Commits: the weekly auto-release run tags
   vX.Y.Z and that tag builds the image. pyproject.toml's version stays a
   placeholder (README.md, "Versioning").

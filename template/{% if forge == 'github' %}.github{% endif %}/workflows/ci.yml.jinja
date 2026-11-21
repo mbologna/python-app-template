@@ -1,4 +1,5 @@
 {%- set changelog = changelog_releases and not releases -%}
+{%- set package = kind == 'package' -%}
 name: CI
 
 "on":
@@ -16,7 +17,7 @@ name: CI
 
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
-{%- if releases %}
+{%- if releases or (package and changelog) %}
   # Never cancel a run on the default branch: it may be releasing, and a cut
   # release leaves a tag without its Release.
 {%- elif changelog %}
@@ -24,6 +25,9 @@ concurrency:
   # and a cut release leaves a tag without its Release.
 {%- elif cloud_run != 'none' %}
   # Never cancel a run on the default branch: it may be deploying.
+{%- elif package %}
+  # Never cancel a run on the default branch, so every commit on main keeps
+  # its result.
 {%- else %}
   # Never cancel a run on the default branch: it may be pushing the image.
 {%- endif %}
@@ -41,6 +45,7 @@ jobs:
       python_version: "3.15"
       enable_codecov: {{ codecov | lower }}
     secrets: inherit
+{%- if not package %}
 
   docker:
     needs: python
@@ -114,7 +119,41 @@ jobs:
       deploy_type: {{ cloud_run }}
 {%- endif %}
     secrets: inherit
-{%- if changelog %}
+{%- endif %}
+{%- if changelog and package %}
+
+  # Releases: Monday's schedule tags vX.Y.Z with a GitHub Release of the
+  # commit subjects when a feat, fix, perf, revert or breaking commit
+  # landed (or a maintenance release for dependency updates), and a push to
+  # main tags only a fix(security) commit.
+{%- if pypi_publish %} publish.yml builds each tag and
+  # publishes it to PyPI.
+{%- else %} A tag builds nothing.
+{%- endif %}
+  auto-release:
+    needs: [python]
+{%- if pypi_publish %}
+    # contents: push the tag and create the Release; actions: start the PyPI
+    # publish on it. A tag pushed with GITHUB_TOKEN triggers no `push` run,
+    # so publish.yml is dispatched on the tag instead.
+    permissions:
+      contents: write
+      actions: write
+{%- else %}
+    # contents: push the tag and create the Release.
+    permissions:
+      contents: write
+{%- endif %}
+    uses: mbologna/.github/.github/workflows/auto-release.yml@fcc3f261fb2c3556df6b50f6e97782a1f308fb67 # main
+    with:
+      strategy: conventional
+{%- if pypi_publish %}
+      dispatch_workflow: publish.yml
+{%- else %}
+      dispatch_tag_build: false
+{%- endif %}
+    secrets: inherit
+{%- elif changelog %}
 
   # Release tags as a changelog: Monday's schedule tags vX.Y.Z with a GitHub
   # Release of the commit subjects when a feat, fix, perf, revert or

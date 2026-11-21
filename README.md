@@ -7,7 +7,9 @@ application shipped as a container image: a CronJob, a bot or a small web
 service. Every such repository gets the same skeleton, and a fix to the
 skeleton reaches all of them as an ordinary pull request. The questions
 below cover what those repositories need to differ in, so their files can
-stay as the template renders them.
+stay as the template renders them. A Python project that ships no image (a
+library, a tool, a generator that CI runs) uses the same skeleton in
+[package mode](#package-mode).
 
 ## What you get
 
@@ -44,6 +46,8 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 | `project_name` | | Distribution, console script and image name |
 | `package_name` | `project_name` with underscores | Import name under `src/` |
 | `description` | | `pyproject.toml`, README and the image's description label |
+| `kind` | `app` | `app`: an application shipped as a container image. `package`: the same project without the image; see [Package mode](#package-mode) |
+| `python_floor` | `3.15` | With `kind: package`: the oldest Python the package supports. See [Package mode](#package-mode) |
 | `author` | Michele Bologna | `pyproject.toml` and the copyright line |
 | `license` | `MIT` | `MIT`, `Apache-2.0` and `GPL-3.0-only` write `LICENSE`, `license` in `pyproject.toml` and the image's licences label. `other` takes `license_expression`. `none` writes no licence file or metadata |
 | `license_expression` | | With `license: other`: an SPDX expression such as `MIT AND GPL-3.0-only`. The project provides `LICENSE` and the other texts in `LICENSES/`; both go into the wheel and the image |
@@ -55,11 +59,13 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 
 ### The image
 
+`kind: package` skips every question in this table.
+
 | Question | Default | Effect |
 |---|---|---|
 | `base_variant` | `slim` | `slim` (Debian, glibc, takes every wheel) or `alpine` (musl, smaller) |
 | `entrypoint` | `entrypoint` | How the image starts; see [Entry points](#entry-points) |
-| `script_target` | `<package>:main` | The function behind the `project_name` console script, as `module:function` |
+| `script_target` | `<package>:main` | The function behind the `project_name` console script, as `module:function`. A package asks it too, and an empty answer renders no console script |
 | `image_uid` | 1000 | `USER uid:gid`, with the GID equal to the UID |
 | `image_user` | empty | Creates a named account for that UID, for software that looks the UID up in `/etc/passwd`. Empty runs as the bare UID |
 | `runtime_packages` | empty | Distribution packages installed in the runtime stage, in the same layer as the security updates, with apt or apk as the base needs and the hadolint ignore for unpinned packages |
@@ -72,13 +78,14 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 
 | Question | Default | Effect |
 |---|---|---|
-| `releases` | yes | GitHub. Yes: image releases, where only `vX.Y.Z` tags publish the image. No: every push to main publishes it. See [Release modes](#release-modes) |
-| `changelog_releases` | no | GitHub, with `releases: false`: auto-release still tags `vX.Y.Z` weekly with a GitHub Release, as a changelog. See [Release modes](#release-modes) |
-| `cloud_run` | `none` | GitHub, with `releases: false`: `service` or `job` deploys each image published from main to Cloud Run (docker-ci's `deploy_type`) |
+| `releases` | yes | GitHub app. Yes: image releases, where only `vX.Y.Z` tags publish the image. No: every push to main publishes it. See [Release modes](#release-modes) |
+| `changelog_releases` | no | GitHub app with `releases: false`, or any package: auto-release tags `vX.Y.Z` weekly with a GitHub or GitLab Release, as a changelog. See [Release modes](#release-modes) and [Package mode](#package-mode) |
+| `pypi_publish` | no | GitHub package with `changelog_releases`: each tag is published to PyPI. See [Package mode](#package-mode) |
+| `cloud_run` | `none` | GitHub app with `releases: false`: `service` or `job` deploys each image published from main to Cloud Run (docker-ci's `deploy_type`) |
 | `codecov` | no | GitHub: uploads the coverage report to Codecov |
-| `smoke_cmd` | GitHub: `<project_name> --help`; GitLab: `auto` | GitHub: a shell command docker-ci runs in the image (entry point overridden, no network) that must exit 0. GitLab: container-app's `smoke_cmd`, which is `auto` (import every installed package), `none`, or the arguments to run the image with |
-| `extra_images` | empty | GitLab: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input. See [Several images](#several-images) |
-| `changed_images_only` | yes | GitLab, with `extra_images`: container-app's `changed_images_only`. Yes: a release rebuilds only the images whose files changed. No: every release rebuilds every image. See [Several images](#several-images) |
+| `smoke_cmd` | GitHub: `<project_name> --help`; GitLab: `auto` | Apps only. GitHub: a shell command docker-ci runs in the image (entry point overridden, no network) that must exit 0. GitLab: container-app's `smoke_cmd`, which is `auto` (import every installed package), `none`, or the arguments to run the image with |
+| `extra_images` | empty | GitLab app: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input. See [Several images](#several-images) |
+| `changed_images_only` | yes | GitLab app, with `extra_images`: container-app's `changed_images_only`. Yes: a release rebuilds only the images whose files changed. No: every release rebuilds every image. See [Several images](#several-images) |
 | `owned_files` | none | Files the project owns; see [Owning a file](#owning-a-file) |
 
 Docker Hub pushes are off in every generated project.
@@ -105,11 +112,66 @@ release notes. Its docker job keeps `contents: read`, the workflow has no
 `tags:` trigger, and auto-release gets no `image` input: with no `X.Y.Z`
 image to scan, it never cuts a fresh-rebuild release, while its base image
 check still reads `Dockerfile`. On GitLab, ci-templates' `container-app`
-builds images only from release tags, so only image releases exist there
-and both questions are skipped.
+builds images only from release tags, so an app there has only image
+releases and both questions are skipped. A package has no image, and
+`changelog_releases` alone picks its mode on either forge.
 
 When every push publishes, the `sha-*` images are the rollback window, and
 a Cloud Run deploy points the service or job at the pushed image's digest.
+
+## Package mode
+
+`kind: package` renders the project without an image, for a library, a
+command-line tool or a generator that CI runs. It keeps the `src/` layout,
+uv, ruff, pytest with the coverage gate, pre-commit and Renovate. It drops
+`Dockerfile`, `.dockerignore`, every question under
+[The image](#the-image) except `script_target`, and `smoke_cmd`,
+`cloud_run`, `extra_images` and `changed_images_only`. `README.md` and
+`AGENTS.md` describe a package, with no image, UID or entry point.
+
+| Question | Default | Effect |
+|---|---|---|
+| `python_floor` | `3.15` | The oldest Python the package supports, from 3.10 to 3.15: `requires-python = ">=<floor>"` and ruff's `target-version`. CI still tests on Python 3.15 only |
+| `script_target` | `<package>:main` | The `project_name` console script, as for an app. Empty renders no `[project.scripts]`, for a library |
+| `changelog_releases` | no | Yes: auto-release tags `vX.Y.Z` on Monday's schedule with a GitHub or GitLab Release of the commit subjects; a tag builds nothing. No: no tags and no releases |
+| `pypi_publish` | no | GitHub, with `changelog_releases`: adds `.github/workflows/publish.yml`, which builds each tag with the tag's version and uploads it to PyPI with trusted publishing |
+
+What the CI file holds:
+
+- GitHub: `ci.yml` calls `python-ci` and, with `changelog_releases`,
+  `auto-release.yml` with `dispatch_tag_build: false`. With `pypi_publish`
+  the auto-release job also gets `actions: write` and
+  `dispatch_workflow: publish.yml`, so the new tag starts `publish.yml`.
+  There is no `docker-ci` job and no `requirements-uv.txt`.
+- GitLab: `.gitlab-ci.yml` includes the `base`, `commits` and `python-test`
+  components and, with `changelog_releases`, `auto-release`, all at the
+  ci-templates version an app uses. The `test` job runs on the
+  `python:<version>-slim` image. `requirements-uv.txt` stays, because
+  python-test installs uv from it.
+
+PyPI's trusted publisher names the repository, the workflow file and the
+GitHub environment, so `publish.yml` keeps its name and its publish job
+runs in the `pypi` environment. Add the publisher on PyPI before the first
+release. `version` in `pyproject.toml` stays `0.0.0`: `publish.yml` sets
+the tag's version before it builds.
+
+A package whose CI does more than test and release, such as building a site
+and deploying it to GitHub Pages, owns its CI file: `owned_files: [ci]`
+writes `ci.yml` or `.gitlab-ci.yml` on the first copy as a starting point,
+and updates leave it alone while the rest of the skeleton keeps arriving.
+One or two extra jobs at the end of the file can instead stay a local
+change, which survives updates (see [Owning a file](#owning-a-file)).
+
+A tool that hosts also run as a plain script, downloaded from a release
+tag and started with `python3`, keeps its code in
+`src/<package>/__init__.py`, imports only the standard library, and sets
+`python_floor` to the oldest Python those hosts run.
+
+### Not a fit
+
+A uv workspace with several packages and several images needs a layout
+and a pipeline per member, which neither mode renders. Keep such a
+repository's skeleton by hand.
 
 ## Several images
 
@@ -162,7 +224,9 @@ Copier leaves it inline to resolve.
 
 `owned_files` hands a file to the project outright: Copier writes it on the
 first copy and never again. The choices are `Dockerfile`, `ci` (the forge's
-CI file), `.dockerignore`, `.gitignore` and `.pre-commit-config.yaml`.
+CI file), `.dockerignore`, `.gitignore` and `.pre-commit-config.yaml`; a
+package, which has no `Dockerfile` or `.dockerignore`, can't choose those
+two.
 `README.md`, `AGENTS.md`, `CLAUDE.md` and `LICENSE` are always owned.
 
 The cost of owning a file is that template fixes to it stop arriving: a new
@@ -200,7 +264,7 @@ Move the code to `src/<package>/` if it isn't there yet, and commit
 `.gitignore` if it is.
 
 The template's `requires-python` is the image's Python, which ruff also
-takes as its target version. Moving an older repository to it can reformat
+takes as its target version (a package takes `python_floor` for both). Moving an older repository to it can reformat
 code: from Python 3.14, `ruff format` writes `except (A, B):` as
 `except A, B:`.
 
@@ -239,7 +303,9 @@ pushes the image, as `X.Y.Z`, `X.Y` and `latest`, and the pipeline sets the
 image's `org.opencontainers.image.version` label from that tag. In the
 changelog mode the tags are release notes only, and each push to main
 publishes `latest` and `sha-<commit>`, as it does with no releases at all.
-Nothing needs the version inside the package, so nothing has to be bumped.
+A package's tags build nothing, unless `pypi_publish` builds each one for
+PyPI with the tag's version. Nothing needs the version inside the package,
+so nothing has to be bumped.
 
 This template is versioned the same way: Monday's CI run tags `vX.Y.Z`
 with a GitHub Release when a `feat`, `fix`, `perf`, `revert` or breaking
@@ -249,13 +315,17 @@ copier manager offers generated projects. See the
 
 ## Development
 
-CI renders the template in seven answer combinations covering both forges,
-the three release modes, both base images, the three entry-point styles,
-every licence kind, the image questions and both `changed_images_only`
-settings. Each result runs ruff, its tests with the coverage gate,
-pre-commit, hadolint, an image build, a smoke test on a read-only root
-filesystem and checks of the image's user, exposed port and the absence of
-pip, uv and git. A second job copies a project from the latest release,
+CI renders the template in ten answer combinations. Seven are apps,
+covering both forges, the three release modes, both base images, the three
+entry-point styles, every licence kind, the image questions and both
+`changed_images_only` settings. Three are packages: GitHub without
+releases, a GitHub library published to PyPI with a 3.10 floor, and GitLab
+with changelog releases. Each result runs ruff, its tests with the coverage
+gate, pre-commit and, on GitHub, actionlint. An app also runs hadolint, an
+image build, a smoke test on a read-only root filesystem and checks of the
+image's user, exposed port and the absence of pip, uv and git. A package
+is checked for the files it must not have, and for a `README.md` and
+`AGENTS.md` free of image terms. A second job copies a project from the latest release,
 updates it to the commit under test and checks that the result equals a
 fresh copy. Locally:
 

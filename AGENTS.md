@@ -15,6 +15,16 @@ with any question you add or change.
   that renders empty matches nothing.
 - No `_tasks`: a template with tasks needs `--trust`, and Renovate's copier
   manager runs without it.
+- `kind` is `app` (the default) or `package`. Every image question, and
+  `smoke_cmd`, `cloud_run`, `extra_images` and `changed_images_only`, has
+  `when: kind == 'app'`; `_exclude` drops the image files for a package,
+  one templated entry per file as in `_skip_if_exists`. `releases`
+  defaults to `kind == 'app'`, so a package sees it false and
+  `changelog_releases` (asked on both forges) decides its releases. A
+  template that branches on the mode tests `kind` before the release
+  questions. README, "Package mode".
+- `python_floor`'s default is the CI Python (`python_version` in the
+  rendered CI, the GitLab `test` image): move them together.
 - GitHub's three release modes come from two questions: `releases` (image
   releases) and, when it is false, `changelog_releases` (tags and GitHub
   Releases as a changelog, images per push). A template that branches on
