@@ -310,8 +310,9 @@ extra_images:
 changed_images_only:
   type: bool
   help: >-
-    GitLab: a release rebuilds only the images whose files changed (cheaper,
-    but an unchanged image misses the distribution's security updates); no
+    GitLab: a release rebuilds only the images whose files changed, plus any
+    image a fresh rebuild names for fixable HIGH or CRITICAL findings
+    (cheaper, but an unchanged image misses lesser security updates); no
     rebuilds every image on every release
   default: true
   when: "{{ forge == 'gitlab' and kind == 'app' and extra_images.strip() != '' }}"

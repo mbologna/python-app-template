@@ -85,7 +85,7 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 | `codecov` | no | GitHub: uploads the coverage report to Codecov |
 | `smoke_cmd` | GitHub: `<project_name> --help`; GitLab: `auto` | Apps only. GitHub: a shell command docker-ci runs in the image (entry point overridden, no network) that must exit 0. GitLab: container-app's `smoke_cmd`, which is `auto` (import every installed package), `none`, or the arguments to run the image with |
 | `extra_images` | empty | GitLab app: subdirectories with their own `Dockerfile`. Each builds `$CI_REGISTRY_IMAGE/<subdirectory>` through container-app's `images` input. See [Several images](#several-images) |
-| `changed_images_only` | yes | GitLab app, with `extra_images`: container-app's `changed_images_only`. Yes: a release rebuilds only the images whose files changed. No: every release rebuilds every image. See [Several images](#several-images) |
+| `changed_images_only` | yes | GitLab app, with `extra_images`: container-app's `changed_images_only`. Yes: a release rebuilds only the images whose files changed, and those a fresh rebuild names. No: every release rebuilds every image. See [Several images](#several-images) |
 | `owned_files` | none | Files the project owns; see [Owning a file](#owning-a-file) |
 
 Docker Hub pushes are off in every generated project.
@@ -181,12 +181,18 @@ On GitLab, `extra_images` adds an image for each subdirectory, and
 With `changed_images_only: true`, the default, a release rebuilds only the
 images whose files changed since the previous release; the others get the
 new version's tags on their previous digest, with no build. That saves CI
-minutes and registry space. The cost is security updates. The runtime stage
-applies the distribution's updates at build time, and auto-release cuts a
-fresh-rebuild release (a patch release when the last image has fixable
-findings in the packages its Dockerfile installs) only for a project with
-one Dockerfile. With several, nothing ever rebuilds an image whose files
-don't change, so it keeps the packages of its last build.
+minutes and registry space. The cost is security updates, which the
+runtime stage applies at build time.
+
+auto-release's fresh rebuild covers the serious ones. Since ci-templates
+8.3.0, container-app passes its `images` input to auto-release, which
+scans every image at the last version. When the last tag is at least a
+week old and an image has fixable HIGH or CRITICAL findings in the
+packages its Dockerfile installs, auto-release releases a patch and names
+the image in a `Fresh rebuild: <image>` line of the tag message. That
+image builds even though its files did not change. Any other unchanged
+image keeps the packages of its last build, so lower-severity fixes wait
+until its files change.
 
 With `changed_images_only: false`, every release rebuilds every image, and
 each one picks up the current security updates. Releases take longer and
