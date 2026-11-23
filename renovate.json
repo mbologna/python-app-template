@@ -26,9 +26,9 @@
     },
     {
       "customType": "regex",
-      "description": "apprise-notify, my own PyPI package, in the rendered pyproject.toml (a Jinja template, which the pep621 manager doesn't read).",
+      "description": "apprise in the rendered pyproject.toml (a Jinja template, which the pep621 manager doesn't read).",
       "managerFilePatterns": ["/^template/pyproject\\.toml\\.jinja$/"],
-      "matchStrings": ["\"(?<depName>apprise-notify)>=(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+      "matchStrings": ["\"(?<depName>apprise)>=(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
       "datasourceTemplate": "pypi"
     }
   ]

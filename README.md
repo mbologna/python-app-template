@@ -19,7 +19,7 @@ library, a tool, a generator that CI runs) uses the same skeleton in
 | Lint and tests | ruff (lint and format), pytest with pytest-cov and `[tool.coverage.report] fail_under` (80 by default), mypy and bandit in pre-commit |
 | Image | Two stages. A hash-pinned uv (`requirements-uv.txt`) runs `uv sync --locked --no-dev` into `/opt/venv`, dependencies in a layer of their own. The runtime stage is the same `python:<version>-slim` or `-alpine` digest without pip or ensurepip, with the distribution's security updates applied at build time, running as a non-root UID with OCI labels and a read-only root filesystem |
 | Dependencies | `uv.lock`, a 7-day `exclude-newer` cooldown, `renovate.json` extending [`mbologna/.github`](https://github.com/mbologna/.github)'s shared preset |
-| Notifications | Optional: [apprise-notify-py](https://github.com/mbologna/apprise-notify-py), with `APPRISE_URL` holding one Apprise API URL or several space-separated ones tried in order |
+| Notifications | Optional: the [apprise](https://github.com/caronc/apprise) library, with `APPRISE_URL` holding one Apprise API URL or several space-separated ones, each its own priority group, tried in order |
 | CI | GitHub: callers of `mbologna/.github`'s `python-ci` and `docker-ci`, pinned by SHA, with a gating smoke test and one of three [release modes](#release-modes), with an optional Cloud Run deploy when every push publishes. GitLab: `base`, `container-app` (commit check, hadolint, kaniko-build and auto-release) and `python-test` from [ci-templates](https://gitlab.com/mbologna/ci-templates), all at one version |
 | Repository files | `AGENTS.md`, `CLAUDE.md`, `README.md`, `.pre-commit-config.yaml`, `.dockerignore`, `.gitignore`, `LICENSE` (MIT, Apache-2.0 or GPL-3.0-only) |
 
@@ -52,7 +52,7 @@ separated by spaces, for example `-d 'runtime_packages=tzdata curl'`.
 | `license` | `MIT` | `MIT`, `Apache-2.0` and `GPL-3.0-only` write `LICENSE`, `license` in `pyproject.toml` and the image's licences label. `other` takes `license_expression`. `none` writes no licence file or metadata |
 | `license_expression` | | With `license: other`: an SPDX expression such as `MIT AND GPL-3.0-only`. The project provides `LICENSE` and the other texts in `LICENSES/`; both go into the wheel and the image |
 | `forge` | `github` | Picks the CI and the image registry (GHCR or the GitLab project registry) |
-| `notifications` | yes | Adds apprise-notify and `APPRISE_URL` |
+| `notifications` | yes | Adds apprise and `APPRISE_URL` |
 | `sample_code` | yes | Generates the example package and its tests; answer no when adopting the template |
 | `main_module` | yes | The package has a `__main__.py`; coverage leaves that file out |
 | `coverage_fail_under` | 80 | The coverage gate |
