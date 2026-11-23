@@ -298,6 +298,27 @@ changed: `license: none` removes `LICENSE`. With `license: other` the
 template still renders a placeholder `LICENSE`, which never overwrites the
 project's own.
 
+## Why not an existing tool
+
+This template is already a configuration of Copier, the established
+engine. The candidates are other templates:
+
+- Community Copier and Cookiecutter templates
+  ([copier-uv](https://github.com/pawamoy/copier-uv),
+  [python-copier-template](https://github.com/DiamondLightSource/python-copier-template),
+  [simple-modern-uv](https://github.com/jlevy/simple-modern-uv),
+  [cookiecutter-uv](https://github.com/osprey-oss/cookiecutter-uv)) render
+  a Python project, but none builds a hardened two-stage uv image: no pip,
+  a non-root UID, security updates applied at build time.
+- None of them asks for the image's UID, packages or writable directories.
+- None has a GitLab path.
+- None wires the project to shared reusable workflows and CI components.
+- [uv-docker-example](https://github.com/astral-sh/uv-docker-example)
+  (Astral's uv-in-Docker example) is an example to copy, not a template,
+  so later fixes never reach the projects made from it.
+
+Checked 2026-11-23.
+
 ## Versioning
 
 A generated project keeps `version = "0.0.0"` in `pyproject.toml`. With
