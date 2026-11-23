@@ -1,3 +1,9 @@
+{% if notifications -%}
+import http.server
+import json
+import threading
+
+{% endif -%}
 import pytest
 
 {% if notifications -%}
@@ -42,12 +48,69 @@ def sent(monkeypatch):
 
 def test_problem_is_sent_to_apprise(sent):
     assert main(["disk full"]) == 1
-    assert sent == [("http://a/notify/k http://b/notify/k", "{{ project_name }}: 1 to look at", {"type_": "warning"})]
+    assert sent == [
+        ("http://a/notify/k http://b/notify/k", "{{ project_name }}: 1 to look at", {"notify_type": "warning"}),
+    ]
 
 
 def test_dry_run_sends_nothing(sent):
     assert main(["--dry-run", "disk full"]) == 1
     assert sent == []
+
+
+def test_apprise_api_url():
+    assert {{ package_name }}.apprise_api_url("http://apprise:8000/notify/k?x=1", timeout=5) == (
+        "apprise://apprise:8000/k?method=json&version=1&retry=1&wait=1&cto=5&rto=5"
+    )
+    assert {{ package_name }}.apprise_api_url("https://example.org/apprise/notify/k").startswith(
+        "apprises://example.org/apprise/k?"
+    )
+
+
+class StubApprise:
+    """A local Apprise API answering every POST with one status; records the bodies."""
+
+    def __init__(self, status):
+        calls = self.calls = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                calls.append(json.loads(self.rfile.read(int(self.headers["content-length"]))))
+                self.send_response(status)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}/notify/k"
+
+
+@pytest.fixture
+def stub(monkeypatch):
+    monkeypatch.setattr({{ package_name }}, "_RETRY_WAIT_SECONDS", 0)
+    servers = []
+
+    def start(status):
+        servers.append(StubApprise(status))
+        return servers[-1]
+
+    yield start
+    for server in servers:
+        server.server.shutdown()
+        server.server.server_close()
+
+
+def test_notify_falls_back_in_order(stub):
+    down, ok, spare = stub(500), stub(200), stub(200)
+    assert {{ package_name }}.notify(f"{down.url} {ok.url} {spare.url}", "t", "b", notify_type="warning")
+    assert (len(down.calls), len(spare.calls)) == (2, 0)
+    assert ok.calls == [{"title": "t", "body": "b", "type": "warning"}]
+
+
+def test_notify_without_url_returns_false():
+    assert not {{ package_name }}.notify("", "t", "b")
 {%- else %}
 
 

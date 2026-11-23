@@ -90,7 +90,7 @@ forge:
 
 notifications:
   type: bool
-  help: Send notifications through an Apprise API server (apprise-notify-py, APPRISE_URL)
+  help: Send notifications through an Apprise API server (the apprise library, APPRISE_URL)
   default: true
 
 sample_code:

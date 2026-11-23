@@ -8,11 +8,51 @@ needs attention, so a failed Job shows up in the cluster too.
 import argparse
 {%- if notifications %}
 import os
+import urllib.parse
 
-from apprise_notify import notify
+import apprise
 {%- endif %}
 
 __all__ = ["build_report", "main"]
+{%- if notifications %}
+
+# Seconds before the one retry of an Apprise URL.
+_RETRY_WAIT_SECONDS = 1
+# Seconds each attempt may take to connect, and then to read the reply.
+_TIMEOUT_SECONDS = 15
+
+
+def apprise_api_url(url: str, timeout: int = _TIMEOUT_SECONDS) -> str:
+    """The apprise library's URL for an Apprise API endpoint, http(s)://host:port/notify/<key>.
+
+    JSON to /notify/<key> (version=1), with one retry, and the timeout for the
+    connect (cto) as well as each read (rto). Any query on the URL is dropped.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    scheme = "apprises" if parsed.scheme == "https" else "apprise"
+    prefix, _, key = parsed.path.rpartition("/notify/")
+    path = f"{prefix.strip('/')}/{key}".lstrip("/")
+    return (
+        f"{scheme}://{parsed.netloc}/{path}?method=json&version=1"
+        f"&retry=1&wait={_RETRY_WAIT_SECONDS}&cto={timeout}&rto={timeout}"
+    )
+
+
+def notify(urls: str, title: str, body: str, notify_type: str = "info") -> bool:
+    """Send a notification to the first of `urls` that delivers.
+
+    `urls` holds one Apprise API notify URL, or several separated by
+    whitespace. Each becomes its own apprise priority group, so they are tried
+    in order, each retried once before the next. Returns False when nothing
+    delivered or there is no URL; apprise logs the failures.
+    """
+    notifier = apprise.Apprise()
+    for priority, url in enumerate(urls.split(), start=1):
+        notifier.add(apprise_api_url(url), tag=f"{priority}:notify")
+    if not len(notifier):
+        return False
+    return bool(notifier.notify(title=title, body=body, notify_type=notify_type, tag="notify"))
+{%- endif %}
 
 
 def build_report(items: list[str]) -> tuple[str, str, bool]:
@@ -44,6 +84,6 @@ def main(argv: list[str] | None = None) -> int:
     if problem and not args.dry_run:
         # APPRISE_URL holds one Apprise API notify URL, or several separated by
         # spaces, tried in order until one delivers. Empty sends nothing.
-        notify(os.environ.get("APPRISE_URL", ""), title, body, type_="warning")
+        notify(os.environ.get("APPRISE_URL", ""), title, body, notify_type="warning")
 {%- endif %}
     return 1 if problem else 0

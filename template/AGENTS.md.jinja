@@ -63,9 +63,10 @@
   with{% else %}the image installs
   it with{% endif %} `--locked`. `exclude-newer` keeps releases younger than 7 days out.
 {%- if notifications %}
-- Notifications go through `apprise_notify.notify()` with the `APPRISE_URL`
-  environment variable: one URL or several space-separated ones, tried in
-  order. It never raises; check its return value when sending matters.
+- Notifications go through `notify()` (the apprise library) with the
+  `APPRISE_URL` environment variable: one URL or several space-separated
+  ones, each its own priority group, tried in order. It returns False rather
+  than raising; check it when sending matters.
 {%- endif %}
 {%- if package %}
 - `requires-python` is `>={{ python_floor }}`, and ruff's `target-version` matches it.
