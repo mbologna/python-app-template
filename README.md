@@ -103,7 +103,7 @@ to main only for a CVE fix.
 
 | Mode | Answers | Tags and Releases | Images | Cloud Run |
 |---|---|---|---|---|
-| Image releases | `releases: true` (the default) | docker-ci's `release_strategy` tags `vX.Y.Z` and dispatches the tag's build | Only tags publish, as `X.Y.Z`, `X.Y` and `latest`; the registry cleanup keeps every version | No |
+| Image releases | `releases: true` (the default) | A separate job calls `auto-release.yml`, which tags `vX.Y.Z` and dispatches the tag's build; the docker job keeps `contents: read` | Only tags publish, as `X.Y.Z`, `X.Y` and `latest`; the registry cleanup keeps every version | No |
 | Changelog | `releases: false`, `changelog_releases: true` | A separate job calls `auto-release.yml` with `dispatch_tag_build: false`: the tag and its Release record what main already shipped, and build nothing | Every push to main publishes `latest` and `sha-<commit>` | Optional |
 | None | `releases: false` | None: no tags, no schedule, no `contents: write` | Every push to main publishes `latest` and `sha-<commit>` | Optional |
 
