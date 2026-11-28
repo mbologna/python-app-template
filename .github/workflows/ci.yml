@@ -270,7 +270,7 @@ jobs:
     needs: [render, update]
     permissions:
       contents: write
-    uses: mbologna/.github/.github/workflows/auto-release.yml@ea61923970085662e217bf6e40c26d98185a0b42 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@9f87ecddca50363e8e60d1c3f22edc1bfb10e762 # main
     with:
       strategy: conventional
       # Nothing builds on a tag: the tag itself is the release.
