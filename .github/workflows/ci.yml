@@ -137,7 +137,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.13.8"
+          version: "0.13.9"
           python-version: "3.15"
 
       - name: Render
@@ -240,7 +240,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.13.8"
+          version: "0.13.9"
 
       # A project that changed nothing must come out of `copier update` the
       # same as a fresh copy: no conflict, no leftover, and no --trust.
@@ -270,7 +270,7 @@ jobs:
     needs: [render, update]
     permissions:
       contents: write
-    uses: mbologna/.github/.github/workflows/auto-release.yml@698761bc5a4c53f01bfc6c2303da576418c8ec04 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@ea61923970085662e217bf6e40c26d98185a0b42 # main
     with:
       strategy: conventional
       # Nothing builds on a tag: the tag itself is the release.
